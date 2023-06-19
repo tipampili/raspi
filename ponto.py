@@ -15,7 +15,8 @@ class PontoGUI(tk.Tk):
         self.time_label = tk.Label(self, font=("Arial", 35))
         self.time_label.pack()
         self.update_time()
-        self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1")
+        #self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1")
+        self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1", anchor="w")
         self.status_label.pack(pady=20)
         self.numero = ""
         self.bind("<Key>", self.key_pressed)
