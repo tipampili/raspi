@@ -60,7 +60,7 @@ class PontoGUI(tk.Tk):
                 funcionarios = data['items']
                 self.funcionarios = {funcionario['cracha']: funcionario['nome'] for funcionario in funcionarios}
                 print("Dados do Apex atualizados.")
-        self.after(3600000, self.atualizar_dados_apex) # Atualiza os dados a cada 1 hora -> está em milisegundos
+        self.after(900000, self.atualizar_dados_apex) # Atualiza os dados a cada 1 hora -> está em milisegundos
 
     def enviar_dados_apex_oracle(self):
         with open("/home/pi/raspi/dados.txt", "a") as arquivo:
