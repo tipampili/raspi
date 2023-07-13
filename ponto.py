@@ -68,6 +68,20 @@ class PontoGUI(tk.Tk):
             print(horario)
             dados = f"{self.numero};{horario}\n"
             arquivo.write(dados)
+            
+            nome_funcionario = self.funcionarios.get(self.numero)
+
+            if nome_funcionario:
+                self.status_label.config(text=f"{nome_funcionario}", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
+                self.configure(background="green")
+            else:
+                self.status_label.config(text="Crachá inexistente, ponto registrado!", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
+                self.configure(background="green")
+
+            self.after(700, lambda: self.status_label.config(text="Aproxime o Chachá...", background="#F0F0F0", fg="#F400A1"))
+            self.after(700, lambda: self.configure(background="#F0F0F0"))
+
+        
 
         if self.verificar_conexao_internet():
             with open("/home/pi/raspi/dados.txt", "r") as arquivo:
@@ -96,14 +110,7 @@ class PontoGUI(tk.Tk):
             with open("/home/pi/raspi/dados.txt", "w") as arquivo:
                 arquivo.writelines(linhas_mantidas)
 
-            nome_funcionario = self.funcionarios.get(self.numero)
 
-            if nome_funcionario:
-                self.status_label.config(text=f"{nome_funcionario}")
-            else:
-                self.status_label.config(text="Crachá inexistente, ponto registrado!")
-
-            self.after(1000, lambda: self.status_label.config(text="Aproxime o Chachá..."))
         
         else:
             nome_funcionario = self.funcionarios.get(self.numero)
