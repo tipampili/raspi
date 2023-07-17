@@ -9,4 +9,4 @@ sudo cp lightdm.conf /etc/lightdm
 sudo apt-get install unclutter
 unclutter -idle 0.01 -root
 cd LCD-show
-./MHS35-show
+./LCD35-show
