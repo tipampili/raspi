@@ -2,27 +2,27 @@ import requests
 import json
 import datetime
 import tkinter as tk
+import asyncio
+from threading import Thread
 
 class PontoGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.attributes("-fullscreen", True)
         self.title("Coletor de Ponto")
-
         self.img = tk.PhotoImage(file="/home/pi/raspi/pam1.png")
         self.image_label = tk.Label(self, image=self.img)
         self.image_label.pack()
         self.time_label = tk.Label(self, font=("Arial", 35))
         self.time_label.pack()
         self.update_time()
-        #self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1")
         self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1", anchor="w", wraplength=450)
         self.status_label.pack(pady=20)
         self.numero = ""
         self.bind("<Key>", self.key_pressed)
-
-        self.funcionarios = {} # Var dados Apex
-        self.atualizar_dados_apex() # Obtém os dados do Apex inicialmente
+        self.funcionarios = {}
+        self.atualizar_dados_apex()
+        self.dados = []
 
     def update_time(self):
         current_time = datetime.datetime.now().strftime("%H:%M:%S")
@@ -35,7 +35,7 @@ class PontoGUI(tk.Tk):
             self.status_label.config(text=self.numero)
         elif event.keysym == "Return":
             if len(self.numero) <= 8:
-                self.enviar_dados_apex_oracle()
+                self.armazenar_dados()
             else:
                 print("Número inválido")
                 self.numero = ""
@@ -60,85 +60,39 @@ class PontoGUI(tk.Tk):
                 funcionarios = data['items']
                 self.funcionarios = {funcionario['cracha']: funcionario['nome'] for funcionario in funcionarios}
                 print("Dados do Apex atualizados.")
-        self.after(900000, self.atualizar_dados_apex) # Atualiza os dados a cada 1 hora -> está em milisegundos
+        self.after(550000, self.atualizar_dados_apex)
 
-    def enviar_dados_apex_oracle(self):
-        with open("/home/pi/raspi/dados.txt", "a") as arquivo:
-            horario = datetime.datetime.now().strftime(f'%d%m%y%H%M')
-            print(horario)
-            dados = f"{self.numero};{horario}\n"
-            arquivo.write(dados)
-            
-            nome_funcionario = self.funcionarios.get(self.numero)
+    def armazenar_dados(self):
+        horario = datetime.datetime.now().strftime(f'%d%m%y%H%M')
+        dados = f"{self.numero};{horario}\n"
+        self.dados.append(dados)
+        nome_funcionario = self.funcionarios.get(self.numero)
 
-            if nome_funcionario:
-                self.status_label.config(text=f"{nome_funcionario}", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
-                self.configure(background="green")
-            else:
-                self.status_label.config(text="Crachá inexistente, ponto registrado!", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
-                self.configure(background="green")
-
-            self.after(700, lambda: self.status_label.config(text="Aproxime o Chachá...", background="#F0F0F0", fg="#F400A1"))
-            self.after(700, lambda: self.configure(background="#F0F0F0"))
-
-        
-
-        if self.verificar_conexao_internet():
-            with open("/home/pi/raspi/dados.txt", "r") as arquivo:
-                dados = arquivo.readlines()
-
-            url = 'https://apex.pampili.com.br/ords/afvserver/ponto/pontoparanaiba'
-            headers = {'Content-type': 'application/json'}
-            linhas_mantidas = []
-
-            for linha in dados:
-                campos = linha.strip().split(";")
-                payload = {
-                    "cracha": campos[0],
-                    "horario": campos[1]
-                }
-                json_payload = json.dumps(payload)
-
-                response = requests.post(url, data=json_payload, headers=headers)
-
-                if response.status_code == 200:
-                    print(f"Dado {linha.strip()} enviado com sucesso para o sistema no Apex Oracle.")
-                else:
-                    print(f"Falha ao enviar dado {linha.strip()}. Status Code: {response.status_code}")
-                    linhas_mantidas.append(linha)
-
-            with open("/home/pi/raspi/dados.txt", "w") as arquivo:
-                arquivo.writelines(linhas_mantidas)
-
-
-        
+        if nome_funcionario:
+            self.status_label.config(text=f"{nome_funcionario}", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
+            self.configure(background="green")
         else:
-            nome_funcionario = self.funcionarios.get(self.numero)
-            if nome_funcionario:
-                self.status_label.config(text=f"{nome_funcionario}")
-            else:
-                self.status_label.config(text="Crachá inexistente, ponto registrado!")
-            
-            self.after(1000, lambda: self.status_label.config(text="Aproxime o Chachá..."))
+            self.status_label.config(text="Ponto registrado!", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
+            self.configure(background="green")
+
+        self.after(700, lambda: self.configure(background="#F0F0F0"))
+        self.after(700, lambda: self.status_label.config(text="Aproxime o Chachá...", background="#F0F0F0", fg="#F400A1"))
 
         self.numero = ""
 
-if __name__ == "__main__":
-    app = PontoGUI()
+    async def enviar_dados_periodicos(self):
+        while True:
+            await asyncio.sleep(3600) 
 
-    def verificar_conexao_e_enviar_dados():
-        if app.verificar_conexao_internet():
-            with open("/home/pi/raspi/dados.txt", "r") as arquivo:
-                dados = arquivo.readlines()
+            if self.verificar_conexao_internet():
+                dados_enviar = self.dados.copy()
+                self.dados.clear()
 
-            if dados:
                 url = 'https://apex.pampili.com.br/ords/afvserver/ponto/pontoparanaiba'
-
                 headers = {'Content-type': 'application/json'}
-                linhas_mantidas = []
 
-                for linha in dados:
-                    campos = linha.strip().split(";")
+                for dado in dados_enviar:
+                    campos = dado.strip().split(";")
                     payload = {
                         "cracha": campos[0],
                         "horario": campos[1]
@@ -148,15 +102,35 @@ if __name__ == "__main__":
                     response = requests.post(url, data=json_payload, headers=headers)
 
                     if response.status_code == 200:
-                        print(f"Dado {linha.strip()} enviado com sucesso para o sistema no Apex Oracle.")
+                        print(f"Dado {dado.strip()} enviado com sucesso para o sistema no Apex Oracle.")
                     else:
-                        print(f"Falha ao enviar dado {linha.strip()}. Status Code: {response.status_code}")
-                        linhas_mantidas.append(linha)
+                        print(f"Falha ao enviar dado {dado.strip()}. Status Code: {response.status_code}")
 
-                with open("/home/pi/raspi/dados.txt", "w") as arquivo:
-                    arquivo.writelines(linhas_mantidas)
+            else:
+                self.dados.extend(dados_enviar) 
+
+    def iniciar_interface_grafica(self):
+        self.mainloop()
+
+    def iniciar_loop_async(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.create_task(self.enviar_dados_periodicos())
+        loop.run_forever()
+
+if __name__ == "__main__":
+    app = PontoGUI()
+
+    def verificar_conexao_e_enviar_dados():
+        if app.verificar_conexao_internet():
+            with open("/home/pi/raspi/dados.txt", "r") as arquivo:
+                dados = arquivo.readlines()
+            if dados:
+                Thread(target=app.enviar_dados, args=(dados,)).start()
 
         app.after(300000, verificar_conexao_e_enviar_dados)
 
     verificar_conexao_e_enviar_dados()
-    app.mainloop()
+
+    Thread(target=app.iniciar_loop_async).start()
+    app.iniciar_interface_grafica()
