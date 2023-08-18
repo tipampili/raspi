@@ -2,29 +2,54 @@ import requests
 import json
 import datetime
 import tkinter as tk
-import asyncio
-from threading import Thread
+import sqlite3
 
 class PontoGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.attributes("-fullscreen", True)
         self.title("Coletor de Ponto")
+
         self.img = tk.PhotoImage(file="/home/pi/raspi/pam1.png")
         self.image_label = tk.Label(self, image=self.img)
         self.image_label.pack()
         self.time_label = tk.Label(self, font=("Arial", 35))
         self.time_label.pack()
         self.update_time()
-        self.status_label = tk.Label(self, text="Aproxime o Crachá...", font=("Arial", 30), fg="#F400A1", anchor="w", wraplength=450)
+        self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1", anchor="w", wraplength=450)
         self.status_label.pack(pady=20)
         self.numero = ""
         self.bind("<Key>", self.key_pressed)
+
+        self.ultimo_horario_batida = None
+
         self.funcionarios = {}
         self.atualizar_dados_apex()
-        self.dados = []
-        self.badge_queue = asyncio.Queue()
-        self.data_queue = asyncio.Queue()
+
+        self.db_conn = sqlite3.connect("ponto_database.db")
+        self.create_table_if_not_exists()
+
+    def create_table_if_not_exists(self):
+        cursor = self.db_conn.cursor()
+        cursor.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS ponto_data (
+                cracha TEXT,
+                horario TEXT
+            )
+            '''
+        )
+
+        cursor.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS dados_totais (
+                cracha TEXT,
+                horario TEXT
+            )
+            '''
+        )
+
+        self.db_conn.commit()
 
     def update_time(self):
         current_time = datetime.datetime.now().strftime("%H:%M:%S")
@@ -37,11 +62,11 @@ class PontoGUI(tk.Tk):
             self.status_label.config(text=self.numero)
         elif event.keysym == "Return":
             if len(self.numero) <= 8:
-                self.armazenar_dados()
+                self.enviar_dados_apex_oracle()
             else:
                 print("Número inválido")
                 self.numero = ""
-                self.after(1000, lambda: self.status_label.config(text="Aproxime o Crachá..."))
+                self.after(1000, lambda: self.status_label.config(text="Aproxime o Chachá..."))
 
     def verificar_conexao_internet(self):
         try:
@@ -51,7 +76,8 @@ class PontoGUI(tk.Tk):
             return False
 
     def atualizar_dados_apex(self):
-        if self.verificar_conexao_internet():
+        if self.verificar_conexao_internet() and self.verificar_tempo_minimo():
+            print("Foram atualizados os dados do apex")
             url = "https://apex.pampili.com.br/ords/afvserver/rm/funcionarios?key=PontoPampili@)@!&coligada=1&filial=7"
             headers = {
                 'Content-Type': 'application/json'
@@ -62,87 +88,95 @@ class PontoGUI(tk.Tk):
                 funcionarios = data['items']
                 self.funcionarios = {funcionario['cracha']: funcionario['nome'] for funcionario in funcionarios}
                 print("Dados do Apex atualizados.")
-        self.after(550000, self.atualizar_dados_apex)
+        self.after(900000, self.atualizar_dados_apex)
 
-    def armazenar_dados(self):
+    def gravar_dados_no_banco(self, cracha, horario):
+        cursor = self.db_conn.cursor()
+        cursor.execute("INSERT INTO ponto_data (cracha, horario) VALUES (?, ?)", (cracha, horario))
+        cursor.execute("INSERT INTO dados_totais (cracha, horario) VALUES (?, ?)", (cracha, horario))
+        self.ultimo_horario_batida = datetime.datetime.now()
+        self.db_conn.commit()
+
+    def enviar_dados_para_apex(self):
+        print(self.ultimo_horario_batida)
+        if self.verificar_conexao_internet() and self.verificar_tempo_minimo():
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT * FROM ponto_data")
+            dados = cursor.fetchall()
+
+            url = 'https://apex.pampili.com.br/ords/afvserver/ponto/pontoparanaiba'
+            headers = {'Content-type': 'application/json'}
+            linhas_mantidas = []
+
+            for linha in dados:
+                payload = {
+                    "cracha": linha[0],
+                    "horario": linha[1]
+                }
+                json_payload = json.dumps(payload)
+
+                response = requests.post(url, data=json_payload, headers=headers)
+
+                if response.status_code == 200:
+                    print(f"Dado {linha} enviado com sucesso para o sistema no Apex Oracle.")
+
+                    cursor.execute("DELETE FROM ponto_data WHERE cracha = ? AND horario = ?", (linha[0], linha[1]))
+                else:
+                    print(f"Falha ao enviar dado {linha}. Status Code: {response.status_code}")
+                    linhas_mantidas.append(linha)
+
+            self.db_conn.commit()
+        else:
+            print("Aguardando tempo mínimo ou sem conexão com a internet...")
+            #self.after(550000, self.enviar_dados_para_apex)
+
+    def enviar_dados_apex_oracle(self):
         horario = datetime.datetime.now().strftime(f'%d%m%y%H%M')
-        dados = f"{self.numero};{horario}\n"
-        self.dados.append(dados)
+
         nome_funcionario = self.funcionarios.get(self.numero)
 
         if nome_funcionario:
-            self.status_label.config(text=f"{nome_funcionario}", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
+            self.status_label.config(
+                text=f"{nome_funcionario}", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
             self.configure(background="green")
+
         else:
-            self.status_label.config(text="Crachá inexistente, ponto registrado!", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
+            self.status_label.config(
+                text="Ponto registrado!", background="green", fg="#FFFFFF", font=("Arial", 30, "bold"))
             self.configure(background="green")
 
+        self.after(700, lambda: self.status_label.config(
+            text="Aproxime o Chachá...", background="#F0F0F0", fg="#F400A1"))
         self.after(700, lambda: self.configure(background="#F0F0F0"))
-        self.after(700, lambda: self.status_label.config(text="Aproxime o Crachá...", background="#F0F0F0", fg="#F400A1"))
 
+        self.gravar_dados_no_banco(self.numero, horario)
         self.numero = ""
 
-    async def enviar_dados_periodicos(self):
-        while True:
-            await asyncio.sleep(3600)
+    def verificar_tempo_minimo(self):
 
-            if self.verificar_conexao_internet() and self.dados:
-                dados_enviar = self.dados.copy()
+        if self.ultimo_horario_batida is None:
+            return True
 
-                url = 'https://apex.pampili.com.br/ords/afvserver/ponto/pontoparanaiba'
-                headers = {'Content-type': 'application/json'}
+        tempo_atual = datetime.datetime.now()
+        ultimo_horario = self.ultimo_horario_batida
+        print(f"tempo atual = {tempo_atual} e ultimo hor {ultimo_horario}")
+        diferenca = tempo_atual - ultimo_horario
+        print(f"Diferença {diferenca}")
+        return diferenca.total_seconds() >= 900
 
-                for dado in dados_enviar:
-                    campos = dado.strip().split(";")
-                    payload = {
-                        "cracha": campos[0],
-                        "horario": campos[1]
-                    }
-                    json_payload = json.dumps(payload)
-
-                    response = requests.post(url, data=json_payload, headers=headers)
-
-                    if response.status_code == 200:
-                        print(f"Dado {dado.strip()} enviado com sucesso para o sistema no Apex Oracle.")
-                        self.dados.remove(dado)
-                    else:
-                        print(f"Falha ao enviar dado {dado.strip()}. Status Code: {response.status_code}")
-
-    async def processar_dados_ponto(self):
-        while True:
-            badge_number = await self.badge_queue.get()
-            horario = datetime.datetime.now().strftime(f'%d%m%y%H%M')
-            dado = f"{badge_number};{horario}\n"
-            self.dados.append(dado)
-
-    async def coletar_dados_ponto(self):
-        while True:
-            dado = await self.data_queue.get()
-            self.dados.append(dado)
-
-    def iniciar_interface_grafica(self):
-        self.mainloop()
-
-    def iniciar_loop_async(self):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-        self.loop.create_task(self.enviar_dados_periodicos())
-        self.loop.create_task(self.processar_dados_ponto())
-        self.loop.create_task(self.coletar_dados_ponto())
-        self.loop.run_forever()
 
 if __name__ == "__main__":
     app = PontoGUI()
 
-    def verificar_conexao_e_enviar_dados():
-        if app.verificar_conexao_internet():
-            with open("/home/pi/raspi/dados.txt", "r") as arquivo:
-                dados = arquivo.readlines()
-            if dados:
-                for dado in dados:
-                    app.dados.append(dado)
+    def on_close():
+        app.db_conn.close()
+        app.destroy()
 
-    verificar_conexao_e_enviar_dados()
+    app.protocol("WM_DELETE_WINDOW", on_close)
 
-    Thread(target=app.iniciar_loop_async).start()
-    app.iniciar_interface_grafica()
+    def enviar_dados_apex_apos_15m():
+        app.enviar_dados_para_apex()
+        app.after(900000, enviar_dados_apex_apos_15m)
+
+    app.after(900000, enviar_dados_apex_apos_15m)
+    app.mainloop()
