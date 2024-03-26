@@ -1,4 +1,5 @@
 #! /bin/sh
+sudo apt-get update
 sudo apt-get install x11vnc
 x11vnc -forever -usepw -httpport 5900 -q -bg
 sudo mkdir /home/pi/.config/autostart
