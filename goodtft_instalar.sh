@@ -5,8 +5,8 @@ sudo apt-get install x11vnc
 x11vnc -usepw -forever -display: 0
 sudo cp x11vnc.desktop /home/pi/.config/autostart/x11vnc.desktop
 sudo x11vnc -storepasswd /etc/x11vnc.pass
-
-x11vnc -forever -usepw -httpport 5900 -q -bg
+sudo cp x11vnc.service /lib/systemd/system/x11vnc.service
+sudo systemctl enable x11vnc.service
 sudo mkdir /home/pi/.config/autostart
 chmod -R 777 /home/pi/.config/autostart
 sudo cp auto.desktop /home/pi/.config/autostart/auto.desktop
