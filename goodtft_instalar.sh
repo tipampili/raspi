@@ -5,7 +5,6 @@ chmod -R 755 LCD-show
 sudo apt-get install x11vnc
 x11vnc -forever -usepw -httpport 5900 -q -bg
 sudo mkdir /home/pi/.config/autostart
-chmod -R 777 /home/pi/.config/autostart
 sudo cp auto.desktop /home/pi/.config/autostart/auto.desktop
 sudo cp x11vnc.desktop /home/pi/.config/autostart/x11vnc.desktop
 sudo cp autostart /etc/xdg/lxsession/LXDE-pi/autostart
