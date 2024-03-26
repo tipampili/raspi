@@ -1,11 +1,5 @@
 [Desktop Entry]
-Encoding=UTF-8
-Version=0.9.4
-Type=Application
-Name=x11vnc
-Comment=
-Exec=x11vnc -forever
-OnlyShowIn=XFCE;
-StartupNotify=false
-Terminal=false
-Hidden=false
+Type = Application
+Name = x11vnc
+Exec = x11vnc -forever -usepw -httpport 5900 -q -bg
+StartupNotify = false
