@@ -2,6 +2,7 @@ import requests
 import json
 import datetime
 import sqlite3
+import time
 
 def verificar_conexao_internet():
     try:
@@ -28,6 +29,7 @@ def enviar_dados_para_apex():
                 "horario": linha[1]
             }
             json_payload = json.dumps(payload)
+            time.sleep(1)
 
             response = requests.post(url, data=json_payload, headers=headers)
 
