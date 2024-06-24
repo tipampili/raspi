@@ -15,8 +15,13 @@ def enviar_dados_para_apex():
     if verificar_conexao_internet():
         db_conn = sqlite3.connect("ponto_database.db")
         cursor = db_conn.cursor()
-        cursor.execute("SELECT * FROM ponto_data")
-        #cursor.execute("SELECT * FROM ponto_data WHERE horario LIKE '1206%'")
+        # executando via crontab
+        agora = datetime.datetime.now()
+        intervalo = datetime.timedelta(hours=1)
+        hora_menos_um = agora - intervalo
+        hora_formatada = hora_menos_um.strftime('%d%m%y%H')
+        cursor.execute("SELECT * FROM ponto_data WHERE horario LIKE ?", (hora_formatada + '%',))
+        #cursor.execute("SELECT * FROM ponto_data")
         dados = cursor.fetchall()
 
         url = 'https://apex.pampili.com.br/ords/afvserver/ponto/pontoparanaiba'
