@@ -17,9 +17,9 @@ def enviar_dados_para_apex():
         cursor = db_conn.cursor()
         # executando via crontab
         agora = datetime.datetime.now()
-        intervalo = datetime.timedelta(hours=1)
-        hora_menos_um = agora - intervalo
-        hora_formatada = hora_menos_um.strftime('%d%m%y%H')
+        intervalo = datetime.timedelta(minutes=10)
+        hora = agora - intervalo
+        hora_formatada = hora.strftime('%d%m%y%H%M')
         cursor.execute("SELECT * FROM ponto_data WHERE horario LIKE ?", (hora_formatada + '%',))
         #cursor.execute("SELECT * FROM ponto_data")
         dados = cursor.fetchall()
