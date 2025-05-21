@@ -1,6 +1,6 @@
 #! /bin/sh
-sudo apt update
-sudo apt upgrade -y
+#sudo apt update
+#sudo apt upgrade -y
 sudo apt-get install x11vnc
 x11vnc -usepw -forever -display: 0
 sudo cp x11vnc.desktop /home/pi/.config/autostart/x11vnc.desktop
