@@ -7,8 +7,8 @@ import logging
 import threading
 
 # Configuration
-DB_PATH = "./ponto_database.db"
-LOG_PATH = "./ponto_sync.log"
+DB_PATH = "/home/pi/raspi/ponto_database.db"
+LOG_PATH = "/home/pi/raspi/ponto_sync.log"
 APEX_URL = "https://apex.pampili.com.br/ords/afvserver/ponto/pontoparanaiba"  # substitua pela sua URL
 HEADERS = {"Content-Type": "application/json"}
 
@@ -26,6 +26,7 @@ logging.basicConfig(
 class PontoApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.attributes("-fullscreen", True)
         self.title("Registro de Ponto")
 
         # Database setup
@@ -43,7 +44,7 @@ class PontoApp(tk.Tk):
         self.ultimo_sync = datetime.datetime.min
 
         # UI elements
-        self.img = tk.PhotoImage(file="./pam1.png")
+        self.img = tk.PhotoImage(file="/home/pi/raspi/pam1.png")
         self.image_label = tk.Label(self, image=self.img)
         self.image_label.pack()
         self.time_label = tk.Label(self, font=("Arial", 35))
