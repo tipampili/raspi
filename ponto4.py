@@ -148,7 +148,9 @@ class PontoApp(tk.Tk):
         cursor.execute("SELECT cracha, horario FROM ponto_data")
         registros = cursor.fetchall()
         for cracha, horario in registros:
-            payload = {"cracha": cracha, "horario": horario}
+            hora = datetime.datetime.strptime(horario, '%Y-%m-%dT%H:%M:%S.%f')
+            formatado = hora.strftime('%d%m%y%H%M')
+            payload = {"cracha": cracha, "horario": formatado}
             if self.post_com_retry(payload):
                 cursor.execute("DELETE FROM ponto_data WHERE cracha=? AND horario=?", (cracha, horario))
                 self.db_conn.commit()
