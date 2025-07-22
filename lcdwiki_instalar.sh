@@ -1,7 +1,7 @@
 #! /bin/sh
 #sudo apt update
 #sudo apt upgrade -y
-sudo apt-get install x11vnc
+sudo apt-get install x11vnc sqlite3
 x11vnc -usepw -forever -display: 0
 sudo cp x11vnc.desktop /home/pi/.config/autostart/x11vnc.desktop
 sudo x11vnc -storepasswd /etc/x11vnc.pass
