@@ -45,15 +45,16 @@ class PontoApp(tk.Tk):
 
         # UI elements
         self.img = tk.PhotoImage(file="/home/pi/raspi/pam1.png")
-        self.image_label = tk.Label(self, image=self.img)
+        self.image_label = tk.Label(self, image=self.img, bg="white")
         self.image_label.pack()
-        self.time_label = tk.Label(self, font=("Arial", 35))
+        self.time_label = tk.Label(self, font=("Arial", 35), bg="white")
         self.time_label.pack()
         self.update_time()
-        self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1", anchor="w", wraplength=450)
+        self.status_label = tk.Label(self, text="Aproxime o Chachá...", font=("Arial", 30), fg="#F400A1", anchor="w", wraplength=450, bg="white")
         self.status_label.pack(pady=20)
         self.numero = ""
         self.bind("<Key>", self.key_pressed)
+        self.configure(background="white")
 
         self.funcionarios = {}
 
@@ -96,8 +97,8 @@ class PontoApp(tk.Tk):
             self.configure(background="green")
 
         self.after(700, lambda: self.status_label.config(
-            text="Aproxime o Chachá...", background="#F0F0F0", fg="#F400A1"))
-        self.after(700, lambda: self.configure(background="#F0F0F0"))
+            text="Aproxime o Chachá...", background="white", fg="#F400A1"))
+        self.after(700, lambda: self.configure(background="white"))
 
         #self.gravar_dados_no_banco(self.numero, horario)
         self.registrar_ponto()
