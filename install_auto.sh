@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Iniciando instalação híbrida com autostart de ponto.py..."
+echo "🚀 Iniciando instalação híbrida com autostart root de ponto.py..."
 
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
@@ -47,18 +47,18 @@ sudo systemctl daemon-reload
 sudo systemctl enable x11vnc.service
 
 # -------------------------------------------------------------------
-# ⚙️ Inicialização automática da aplicação ponto.py
+# ⚙️ Inicialização automática da aplicação ponto.py (com sudo)
 # -------------------------------------------------------------------
 APP_PATH="/home/pi/raspi/ponto.py"
 
 if [ "$MODE" = "desktop" ]; then
-  echo "⚙️ Configurando autostart do ponto.py no ambiente gráfico..."
+  echo "⚙️ Configurando autostart do ponto.py (modo gráfico, root)..."
   mkdir -p /home/pi/.config/autostart
   cat <<EOF > /home/pi/.config/autostart/ponto.desktop
 [Desktop Entry]
 Type=Application
 Name=PontoApp
-Exec=/usr/bin/python3 $APP_PATH
+Exec=sudo /usr/bin/python3 $APP_PATH
 X-GNOME-Autostart-enabled=true
 EOF
 
@@ -74,9 +74,9 @@ EOF
   sudo mkdir -p /etc/lightdm
   sudo install -m 644 lightdm.conf /etc/lightdm/lightdm.conf
 
-  echo "✅ ponto.py será iniciado automaticamente no ambiente Desktop."
+  echo "✅ ponto.py configurado para iniciar como root (modo Desktop)."
 else
-  echo "⚙️ Criando serviço systemd para executar ponto.py..."
+  echo "⚙️ Criando serviço systemd para executar ponto.py (root)..."
   cat <<EOF | sudo tee /etc/systemd/system/ponto.service > /dev/null
 [Unit]
 Description=Aplicação ponto.py automática
@@ -87,14 +87,17 @@ Type=simple
 ExecStart=/usr/bin/python3 $APP_PATH
 WorkingDirectory=/home/pi/raspi
 Restart=always
-User=pi
+User=root
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+  sudo systemctl daemon-reload
   sudo systemctl enable ponto.service
-  echo "✅ ponto.py será iniciado automaticamente no modo Headless."
+  echo "✅ ponto.py configurado para iniciar como root (modo Headless)."
 fi
 
 # -------------------------------------------------------------------
@@ -156,6 +159,13 @@ EOF
 echo "✅ Overlay aplicado com sucesso!"
 
 # -------------------------------------------------------------------
+# 🔐 Permitir sudo sem senha para python3
+# -------------------------------------------------------------------
+echo "🔐 Ajustando sudoers para permitir execução sem senha..."
+sudo bash -c 'echo "pi ALL=(ALL) NOPASSWD: /usr/bin/python3" > /etc/sudoers.d/010_pi-nopasswd-python'
+sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd-python
+
+# -------------------------------------------------------------------
 # 🧹 Limpeza
 # -------------------------------------------------------------------
 echo "🧹 Limpando pacotes desnecessários..."
@@ -165,8 +175,8 @@ sudo apt clean
 echo ""
 echo "✅ Instalação concluída!"
 if [ "$MODE" = "desktop" ]; then
-  echo "🖥️ Modo: Desktop (autostart ponto.py + VNC + display SPI)"
+  echo "🖥️ Modo: Desktop (autostart root ponto.py + VNC + display SPI)"
 else
-  echo "💡 Modo: Headless (systemd ponto.service + VNC + display SPI)"
+  echo "💡 Modo: Headless (systemd root ponto.service + VNC + display SPI)"
 fi
 echo "🔁 Reinicie o sistema com: sudo reboot"
