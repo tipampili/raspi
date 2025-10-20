@@ -63,7 +63,7 @@ else
     case "$CHOICE" in
       1) OVERLAY="vc4-kms-dpi-waveshare35a" ;;
       2) OVERLAY="vc4-kms-dpi-mhs35" ;;
-      3|"") OVERLAY="vc4-kms-dpi-goodtft35" ;;
+      3) OVERLAY="vc4-kms-dpi-goodtft35" ;;
       4) OVERLAY="vc4-kms-dpi-ili9486" ;;
       5) OVERLAY="vc4-kms-dpi-default" ;;
       *) echo "❌ Opção inválida. Usando genérico."; OVERLAY="vc4-kms-dpi-default" ;;
