@@ -54,44 +54,42 @@ EOF
 sudo systemctl enable unclutter.service
 
 # -------------------------------------------------------------------
-# 📺 Instalação do driver de tela com fallback
+# 📺 Instalação do driver de tela com fallback moderno
 # -------------------------------------------------------------------
 echo "📺 Instalando driver de tela (detecção automática)..."
 cd /home/pi
 sudo rm -rf LCD-show || true
 
-# Tenta clonar de um dos repositórios
-git clone https://github.com/goodtft/LCD-show.git || \
-git clone https://github.com/lcdwiki/LCD-show.git || true
+git clone --depth 1 https://github.com/goodtft/LCD-show.git || true
 
+LCD_FAIL=0
 if [ -d "/home/pi/LCD-show" ]; then
   cd /home/pi/LCD-show
   chmod +x *.sh || true
 
-  echo "🔍 Tentando executar script do LCD-show..."
   if [ -f "./LCD35-show" ]; then
-    sudo ./LCD35-show || LCD_FAIL=1
-  elif [ -f "./MHS35-show" ]; then
-    sudo ./MHS35-show || LCD_FAIL=1
+    echo "🔍 Tentando executar script antigo (LCD35-show)..."
+    if ! sudo ./LCD35-show; then
+      LCD_FAIL=1
+    fi
   else
-    echo "⚠️ Nenhum script LCD reconhecido — ignorando."
     LCD_FAIL=1
   fi
 else
-  echo "⚠️ Repositório LCD-show não encontrado — ignorando."
   LCD_FAIL=1
 fi
 
-# Se o script falhar, aplica o método moderno via overlay
+# -------------------------------------------------------------------
+# 🚫 Se o LCD-show falhar, aplica overlay moderno
+# -------------------------------------------------------------------
 if [ "${LCD_FAIL}" = "1" ]; then
-  echo "🧩 Aplicando método moderno (overlay em config.txt)..."
-
+  echo "⚙️ Aplicando driver de tela via overlay moderno..."
   BOOTCFG="/boot/firmware/config.txt"
   [ -f "$BOOTCFG" ] || BOOTCFG="/boot/config.txt"
 
   sudo tee -a "$BOOTCFG" > /dev/null <<EOF
 
-# --- Tela SPI 3.5" configurada automaticamente ---
+# --- Tela SPI 3.5 configurada automaticamente ---
 dtoverlay=vc4-kms-v3d
 dtoverlay=piscreen,speed=16000000,rotate=90
 framebuffer_width=480
@@ -99,6 +97,7 @@ framebuffer_height=320
 EOF
 
   echo "✅ Overlay aplicado em $BOOTCFG"
+  echo "⚠️ O método antigo (LCD-show) foi desativado por incompatibilidade."
 fi
 
 # -------------------------------------------------------------------
