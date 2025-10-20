@@ -1,3 +1,5 @@
 [Desktop Entry]
 Type=Application
+Name=StartApp
 Exec=sudo python3 /home/pi/raspi/ponto.py
+X-GNOME-Autostart-enabled=true
