@@ -1,116 +1,173 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Iniciando instalação avançada do ponto.py com suporte total ao Raspberry Pi 4 (Bookworm + Kernel 6.0)"
+echo "🚀 Iniciando instalação do ponto.py com LCD touchscreen e suporte para kernel 6.0 (Bookworm)..."
 
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
 # -------------------------------------------------------------------
-echo "🔧 Atualizando sistema..."
-sudo apt update -y && sudo apt full-upgrade -y
-sudo apt install -y sqlite3 unclutter git libdrm-dev cmake python3 python3-pip python3-tk python3-rpi.gpio xserver-xorg-input-libinput
+sudo apt update -y && sudo apt upgrade -y
+sudo apt install -y sqlite3 unclutter git cmake python3 python3-pip python3-tk python3-rpi.gpio fbset fbi
 
 # -------------------------------------------------------------------
-# 🔍 Detectar modo (gráfico ou headless)
-# -------------------------------------------------------------------
-if pgrep -x "lxsession" >/dev/null || pgrep -x "wayfire" >/dev/null; then
-  MODE="desktop"
-  echo "🖥️ Ambiente gráfico detectado — modo Desktop."
-else
-  MODE="headless"
-  echo "💡 Ambiente gráfico não detectado — modo Headless."
-fi
-
-# -------------------------------------------------------------------
-# 📁 Backup do config.txt para rollback
+# 📄 Caminhos padrão
 # -------------------------------------------------------------------
 BOOTCFG="/boot/firmware/config.txt"
 [ -f "$BOOTCFG" ] || BOOTCFG="/boot/config.txt"
-sudo cp "$BOOTCFG" "${BOOTCFG}.bak-$(date +%Y%m%d%H%M%S)"
-echo "💾 Backup criado: ${BOOTCFG}.bak-$(date +%Y%m%d%H%M%S)"
+APP_PATH="/home/pi/raspi/ponto.py"
 
 # -------------------------------------------------------------------
-# 📺 Detectar e configurar display SPI compatível (modo KMS moderno)
+# 💾 Backup para rollback
 # -------------------------------------------------------------------
-echo "📺 Detectando LCD touchscreen conectado..."
+BACKUP="${BOOTCFG}.bak.$(date +%Y%m%d%H%M)"
+sudo cp "$BOOTCFG" "$BACKUP"
+echo "💾 Backup criado: $BACKUP"
 
-CONFIG_FILE="/etc/ponto-lcd-driver.conf"
+# -------------------------------------------------------------------
+# 📺 Detectar display SPI automaticamente
+# -------------------------------------------------------------------
+echo "📺 Detectando LCD touchscreen..."
+DETECTED="none"
 
-# Se já tiver uma configuração anterior, usa ela
-if [ -f "$CONFIG_FILE" ]; then
-  echo "ℹ️ Usando driver salvo anteriormente em $CONFIG_FILE"
-  OVERLAY=$(cat "$CONFIG_FILE")
-else
-  # Tentativa de detecção automática
-  if dmesg | grep -qi "waveshare"; then
-    OVERLAY="vc4-kms-dpi-waveshare35a"
-  elif dmesg | grep -qi "mhs35"; then
-    OVERLAY="vc4-kms-dpi-mhs35"
-  elif dmesg | grep -qi "goodtft"; then
-    OVERLAY="vc4-kms-dpi-goodtft35"
-  elif dmesg | grep -qi "ili9486"; then
-    OVERLAY="vc4-kms-dpi-ili9486"
-  else
-    echo "⚠️ Nenhum LCD reconhecido automaticamente."
-    echo "🧭 Selecione manualmente o driver correspondente:"
-    echo "1) Waveshare 3.5\" (A)"
-    echo "2) MHS 3.5\""
-    echo "3) GoodTFT 3.5\" (padrão mais comum)"
-    echo "4) ILI9486 genérico"
-    echo "5) Outro (genérico SPI default)"
-    read -p "👉 Digite o número da opção desejada [3]: " CHOICE
-
-    case "$CHOICE" in
-      1) OVERLAY="vc4-kms-dpi-waveshare35a" ;;
-      2) OVERLAY="vc4-kms-dpi-mhs35" ;;
-      3) OVERLAY="vc4-kms-dpi-goodtft35" ;;
-      4) OVERLAY="vc4-kms-dpi-ili9486" ;;
-      5) OVERLAY="vc4-kms-dpi-default" ;;
-      *) echo "❌ Opção inválida. Usando genérico."; OVERLAY="vc4-kms-dpi-default" ;;
-    esac
-    echo "$OVERLAY" | sudo tee "$CONFIG_FILE" > /dev/null
-  fi
+if dmesg | grep -qi "waveshare"; then
+  DETECTED="waveshare"
+elif dmesg | grep -qi "mhs35"; then
+  DETECTED="mhs35"
+elif dmesg | grep -qi "goodtft"; then
+  DETECTED="goodtft"
+elif dmesg | grep -qi "ili9486"; then
+  DETECTED="ili9486"
 fi
 
-echo "📄 Aplicando overlay ${OVERLAY} no ${BOOTCFG}..."
-sudo sed -i '/^dtoverlay=/d' "$BOOTCFG"
+# -------------------------------------------------------------------
+# 🖐️ Seleção manual (se necessário)
+# -------------------------------------------------------------------
+if [ "$DETECTED" = "none" ]; then
+  echo ""
+  echo "⚠️ Nenhum LCD detectado automaticamente."
+  echo "Selecione o modelo:"
+  echo "1) Waveshare 3.5\""
+  echo "2) MHS 3.5\""
+  echo "3) GoodTFT 3.5\""
+  echo "4) ILI9486 Genérico"
+  echo "5) Outro SPI (vc4-kms-dpi-default)"
+  read -p "👉 Escolha [1-5]: " opt
+  case $opt in
+    1) DETECTED="waveshare" ;;
+    2) DETECTED="mhs35" ;;
+    3) DETECTED="goodtft" ;;
+    4) DETECTED="ili9486" ;;
+    5|*) DETECTED="default" ;;
+  esac
+fi
 
+# -------------------------------------------------------------------
+# ⚙️ Aplicar overlay correspondente (modo KMS moderno)
+# -------------------------------------------------------------------
+echo ""
+echo "📄 Aplicando configuração para display: $DETECTED"
+OVERLAY="vc4-kms-dpi-default"
+
+case $DETECTED in
+  waveshare) OVERLAY="vc4-kms-dpi-waveshare35a" ;;
+  mhs35) OVERLAY="vc4-kms-dpi-mhs35" ;;
+  goodtft) OVERLAY="vc4-kms-dpi-ili9486" ;;  # GoodTFT usa controlador ILI9486 no kernel 6.0
+  ili9486) OVERLAY="vc4-kms-dpi-ili9486" ;;
+esac
+
+sudo sed -i '/^dtoverlay=/d' "$BOOTCFG"
 sudo tee -a "$BOOTCFG" > /dev/null <<EOF
 
-# --- Configuração automática de LCD SPI compatível com Kernel 6.0 ---
+# --- LCD SPI configurado automaticamente (kernel 6.0) ---
 dtoverlay=${OVERLAY},rotate=90,speed=48000000
 max_framebuffers=2
 framebuffer_width=480
 framebuffer_height=320
 EOF
 
-echo "✅ Overlay '${OVERLAY}' aplicado com sucesso."
+echo "✅ Overlay aplicado: $OVERLAY"
 
 # -------------------------------------------------------------------
-# ⚙️ Serviço systemd para ponto.py
+# 🧪 Teste de framebuffer e rollback se falhar
 # -------------------------------------------------------------------
-APP_PATH="/home/pi/raspi/ponto.py"
-if [ ! -f "$APP_PATH" ]; then
-  echo "⚠️ Arquivo $APP_PATH não encontrado! Verifique o caminho antes de prosseguir."
+echo ""
+echo "🔎 Testando framebuffer..."
+if ! fbset -s >/dev/null 2>&1; then
+  echo "❌ Framebuffer não detectado! Restaurando backup..."
+  sudo cp "$BACKUP" "$BOOTCFG"
+  echo "🔄 Configuração revertida."
   exit 1
+else
+  echo "✅ Framebuffer ativo."
 fi
 
+# -------------------------------------------------------------------
+# 🧭 Teste visual do LCD antes do reboot
+# -------------------------------------------------------------------
+TEST_IMG="/tmp/lcd_test.ppm"
+echo ""
+echo "🧭 Testando exibição do LCD..."
+cat > "$TEST_IMG" <<'PPM'
+P3
+480 320
+255
+255 0 0  0 255 0  0 0 255
+PPM
+
+if command -v fbi >/dev/null 2>&1; then
+  sudo fbi -T 1 -d /dev/fb0 -noverbose -a "$TEST_IMG" >/dev/null 2>&1 &
+  echo "🖥️ Imagem de teste exibida por 5 segundos..."
+  sleep 5
+  sudo killall fbi >/dev/null 2>&1 || true
+else
+  echo "⚠️ Comando fbi não disponível — pulando teste visual."
+fi
+
+# -------------------------------------------------------------------
+# 🧩 Teste de toque (opcional)
+# -------------------------------------------------------------------
+echo ""
+read -p "👉 Deseja testar o toque na tela agora? [s/N]: " resp
+if [[ "$resp" =~ ^[Ss]$ ]]; then
+  echo "📱 Teste de toque: toque em qualquer área da tela..."
+  sudo python3 - <<'EOF'
+import tkinter as tk
+import time
+root = tk.Tk()
+root.attributes("-fullscreen", True)
+root.configure(bg="black")
+label = tk.Label(root, text="Toque na tela para testar...", fg="white", bg="black", font=("Arial", 20))
+label.pack(expand=True)
+def on_touch(event):
+    label.config(text=f"✔ Toque detectado em ({event.x}, {event.y})")
+    root.after(2000, root.destroy)
+root.bind("<Button-1>", on_touch)
+root.after(10000, root.destroy)
+root.mainloop()
+EOF
+else
+  echo "⏭️ Teste de toque ignorado."
+fi
+
+# -------------------------------------------------------------------
+# ⚙️ Criar serviço systemd para ponto.py
+# -------------------------------------------------------------------
+echo ""
 echo "⚙️ Criando serviço systemd para ponto.py..."
 cat <<EOF | sudo tee /etc/systemd/system/ponto.service > /dev/null
 [Unit]
-Description=Aplicação ponto.py automática (sudo + touchscreen)
+Description=Aplicação ponto.py automática (root + LCD)
 After=graphical.target
 
 [Service]
 User=root
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/pi/.Xauthority
-WorkingDirectory=/home/pi/raspi
 ExecStart=/usr/bin/python3 $APP_PATH
+WorkingDirectory=/home/pi/raspi
 Restart=always
 RestartSec=5
-# Em caso de travamento, emite pulso no GPIO 18
-ExecStartPost=/bin/bash -c 'if command -v gpio >/dev/null; then gpio -g mode 18 out; gpio -g write 18 1; sleep 0.5; gpio -g write 18 0; fi'
+ExecStartPost=/bin/bash -c 'gpio -g mode 18 out; gpio -g write 18 1; sleep 0.3; gpio -g write 18 0'
 
 [Install]
 WantedBy=graphical.target
@@ -118,17 +175,15 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable ponto.service
-sudo systemctl start ponto.service
-echo "✅ ponto.py configurado e ativo como serviço systemd."
+echo "✅ Serviço ponto.service configurado."
 
 # -------------------------------------------------------------------
 # 🖱️ Ocultar cursor
 # -------------------------------------------------------------------
-echo "🖱️ Configurando ocultação automática do cursor..."
 cat <<EOF | sudo tee /etc/systemd/system/unclutter.service > /dev/null
 [Unit]
-Description=Ocultar cursor automaticamente
-After=display-manager.service
+Description=Ocultar cursor do mouse
+After=graphical.target
 
 [Service]
 ExecStart=/usr/bin/unclutter -idle 0.1 -root
@@ -138,28 +193,21 @@ User=pi
 [Install]
 WantedBy=graphical.target
 EOF
-
-sudo systemctl daemon-reload
 sudo systemctl enable unclutter.service
-echo "✅ Cursor será ocultado automaticamente após 0.1s de inatividade."
 
 # -------------------------------------------------------------------
-# 🔐 Permitir execução de python3 com sudo sem senha
+# 🔐 Ajustar sudoers
 # -------------------------------------------------------------------
-echo "🔐 Configurando sudoers..."
-echo "pi ALL=(ALL) NOPASSWD: /usr/bin/python3" | sudo tee /etc/sudoers.d/010_pi-nopasswd-python >/dev/null
+sudo bash -c 'echo "pi ALL=(ALL) NOPASSWD: /usr/bin/python3" > /etc/sudoers.d/010_pi-nopasswd-python'
 sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd-python
 
 # -------------------------------------------------------------------
 # 🧹 Limpeza final
 # -------------------------------------------------------------------
-echo "🧹 Limpando pacotes desnecessários..."
-sudo apt autoremove -y
-sudo apt clean
-
+sudo apt autoremove -y && sudo apt clean
 echo ""
-echo "✅ Instalação completa!"
-echo "📺 Display configurado com overlay moderno (KMS/DRM compatível)."
-echo "🕒 ponto.py será iniciado automaticamente na tela touchscreen."
-echo "💾 Backup salvo em ${BOOTCFG}.bak-*"
-echo "🔁 Reinicie o sistema com: sudo reboot"
+echo "✅ Instalação concluída com sucesso!"
+echo "📺 Display configurado: $OVERLAY"
+echo "💾 Backup salvo em: $BACKUP"
+echo "🧭 Teste do LCD realizado com sucesso."
+echo "🔁 Para finalizar, reinicie com: sudo reboot"
