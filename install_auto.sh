@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Iniciando instalação híbrida com detecção automática de display..."
+echo "🚀 Iniciando instalação híbrida com autostart de ponto.py..."
 
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
@@ -47,31 +47,45 @@ sudo systemctl daemon-reload
 sudo systemctl enable x11vnc.service
 
 # -------------------------------------------------------------------
-# ⚙️ Inicialização automática da aplicação
+# ⚙️ Inicialização automática da aplicação ponto.py
 # -------------------------------------------------------------------
-echo "⚙️ Configurando inicialização automática..."
+APP_PATH="/home/pi/raspi/ponto.py"
+
 if [ "$MODE" = "desktop" ]; then
+  echo "⚙️ Configurando autostart do ponto.py no ambiente gráfico..."
   mkdir -p /home/pi/.config/autostart
-  install -m 644 auto.desktop /home/pi/.config/autostart/auto.desktop
-  install -m 644 x11vnc.desktop /home/pi/.config/autostart/x11vnc.desktop
+  cat <<EOF > /home/pi/.config/autostart/ponto.desktop
+[Desktop Entry]
+Type=Application
+Name=PontoApp
+Exec=/usr/bin/python3 $APP_PATH
+X-GNOME-Autostart-enabled=true
+EOF
+
+  # Copiar VNC para autostart
+  cat <<EOF > /home/pi/.config/autostart/x11vnc.desktop
+[Desktop Entry]
+Type=Application
+Name=X11VNC
+Exec=/usr/bin/systemctl start x11vnc.service
+X-GNOME-Autostart-enabled=true
+EOF
 
   sudo mkdir -p /etc/lightdm
   sudo install -m 644 lightdm.conf /etc/lightdm/lightdm.conf
 
-  if [ -d "/etc/xdg/lxsession/LXDE-pi" ]; then
-    sudo install -m 644 autostart /etc/xdg/lxsession/LXDE-pi/autostart
-  fi
-  echo "✅ Autostart configurado para Desktop."
+  echo "✅ ponto.py será iniciado automaticamente no ambiente Desktop."
 else
-  cat <<EOF | sudo tee /etc/systemd/system/pythonapp.service > /dev/null
+  echo "⚙️ Criando serviço systemd para executar ponto.py..."
+  cat <<EOF | sudo tee /etc/systemd/system/ponto.service > /dev/null
 [Unit]
-Description=Aplicação Python automática
+Description=Aplicação ponto.py automática
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/pi/seu_script.py
-WorkingDirectory=/home/pi
+ExecStart=/usr/bin/python3 $APP_PATH
+WorkingDirectory=/home/pi/raspi
 Restart=always
 User=pi
 
@@ -79,12 +93,12 @@ User=pi
 WantedBy=multi-user.target
 EOF
 
-  sudo systemctl enable pythonapp.service
-  echo "✅ Serviço Python configurado para iniciar automaticamente (modo headless)."
+  sudo systemctl enable ponto.service
+  echo "✅ ponto.py será iniciado automaticamente no modo Headless."
 fi
 
 # -------------------------------------------------------------------
-# 🖱️ Ocultar cursor
+# 🖱️ Ocultar cursor (se houver display)
 # -------------------------------------------------------------------
 echo "🖱️ Ocultando cursor..."
 cat <<EOF | sudo tee /etc/systemd/system/unclutter.service > /dev/null
@@ -103,15 +117,13 @@ EOF
 sudo systemctl enable unclutter.service
 
 # -------------------------------------------------------------------
-# 📺 Detecção automática do display SPI
+# 📺 Detecção automática de display SPI
 # -------------------------------------------------------------------
 echo "📺 Detectando display SPI conectado..."
 
-# Função auxiliar
 detectar_display_spi() {
   local overlay="piscreen"
 
-  # Detectar pelo dmesg
   if dmesg | grep -qi "waveshare"; then
     overlay="waveshare35a"
   elif dmesg | grep -qi "mhs35"; then
@@ -119,8 +131,6 @@ detectar_display_spi() {
   elif dmesg | grep -qi "goodtft"; then
     overlay="goodtft35a"
   elif dmesg | grep -qi "fb_ili9486" || dmesg | grep -qi "ili9486"; then
-    overlay="piscreen"
-  elif ls /sys/class/spi_master/spi0/spi0.0 2>/dev/null | grep -q "spi0.0"; then
     overlay="piscreen"
   fi
 
@@ -155,8 +165,8 @@ sudo apt clean
 echo ""
 echo "✅ Instalação concluída!"
 if [ "$MODE" = "desktop" ]; then
-  echo "🖥️ Modo: Desktop (LXDE + autostart + VNC + display SPI)"
+  echo "🖥️ Modo: Desktop (autostart ponto.py + VNC + display SPI)"
 else
-  echo "💡 Modo: Headless (systemd + VNC + display SPI)"
+  echo "💡 Modo: Headless (systemd ponto.service + VNC + display SPI)"
 fi
 echo "🔁 Reinicie o sistema com: sudo reboot"
