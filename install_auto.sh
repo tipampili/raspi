@@ -33,19 +33,43 @@ echo "💾 Backup criado: ${BOOTCFG}.bak-$(date +%Y%m%d%H%M%S)"
 # 📺 Detectar e configurar display SPI compatível (modo KMS moderno)
 # -------------------------------------------------------------------
 echo "📺 Detectando LCD touchscreen conectado..."
-OVERLAY=""
 
-if dmesg | grep -qi "waveshare"; then
-  OVERLAY="vc4-kms-dpi-waveshare35a"
-elif dmesg | grep -qi "mhs35"; then
-  OVERLAY="vc4-kms-dpi-mhs35"
-elif dmesg | grep -qi "ili9486"; then
-  OVERLAY="vc4-kms-dpi-ili9486"
-elif dmesg | grep -qi "goodtft"; then
-  OVERLAY="vc4-kms-dpi-goodtft35"
+CONFIG_FILE="/etc/ponto-lcd-driver.conf"
+
+# Se já tiver uma configuração anterior, usa ela
+if [ -f "$CONFIG_FILE" ]; then
+  echo "ℹ️ Usando driver salvo anteriormente em $CONFIG_FILE"
+  OVERLAY=$(cat "$CONFIG_FILE")
 else
-  echo "⚠️ Nenhum LCD reconhecido — aplicando overlay genérico para SPI 3.5\"."
-  OVERLAY="vc4-kms-dpi-default"
+  # Tentativa de detecção automática
+  if dmesg | grep -qi "waveshare"; then
+    OVERLAY="vc4-kms-dpi-waveshare35a"
+  elif dmesg | grep -qi "mhs35"; then
+    OVERLAY="vc4-kms-dpi-mhs35"
+  elif dmesg | grep -qi "goodtft"; then
+    OVERLAY="vc4-kms-dpi-goodtft35"
+  elif dmesg | grep -qi "ili9486"; then
+    OVERLAY="vc4-kms-dpi-ili9486"
+  else
+    echo "⚠️ Nenhum LCD reconhecido automaticamente."
+    echo "🧭 Selecione manualmente o driver correspondente:"
+    echo "1) Waveshare 3.5\" (A)"
+    echo "2) MHS 3.5\""
+    echo "3) GoodTFT 3.5\" (padrão mais comum)"
+    echo "4) ILI9486 genérico"
+    echo "5) Outro (genérico SPI default)"
+    read -p "👉 Digite o número da opção desejada [3]: " CHOICE
+
+    case "$CHOICE" in
+      1) OVERLAY="vc4-kms-dpi-waveshare35a" ;;
+      2) OVERLAY="vc4-kms-dpi-mhs35" ;;
+      3|"") OVERLAY="vc4-kms-dpi-goodtft35" ;;
+      4) OVERLAY="vc4-kms-dpi-ili9486" ;;
+      5) OVERLAY="vc4-kms-dpi-default" ;;
+      *) echo "❌ Opção inválida. Usando genérico."; OVERLAY="vc4-kms-dpi-default" ;;
+    esac
+    echo "$OVERLAY" | sudo tee "$CONFIG_FILE" > /dev/null
+  fi
 fi
 
 echo "📄 Aplicando overlay ${OVERLAY} no ${BOOTCFG}..."
@@ -60,7 +84,7 @@ framebuffer_width=480
 framebuffer_height=320
 EOF
 
-echo "✅ Overlay atualizado com sucesso."
+echo "✅ Overlay '${OVERLAY}' aplicado com sucesso."
 
 # -------------------------------------------------------------------
 # ⚙️ Serviço systemd para ponto.py
