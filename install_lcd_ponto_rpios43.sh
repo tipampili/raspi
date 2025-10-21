@@ -1,148 +1,143 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Iniciando instalação do ponto.py com LCD touchscreen — Raspberry Pi OS 4.3 (Bookworm 2025)..."
+echo "🚀 Iniciando instalação / reconfiguração do ponto.py com LCD touchscreen (Raspberry Pi 4, kernel 6.0)..."
+echo "───────────────────────────────────────────────────────────────"
 
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
 # -------------------------------------------------------------------
-sudo apt update -y && sudo apt full-upgrade -y
-sudo apt install -y git cmake python3 python3-pip python3-tk python3-rpi.gpio sqlite3 unclutter fbset fbi dialog
+sudo apt update -y && sudo apt upgrade -y
+sudo apt install -y sqlite3 unclutter git cmake python3 python3-pip python3-tk python3-rpi.gpio fbset fbi
 
 # -------------------------------------------------------------------
-# 📄 Caminhos e variáveis
+# 📄 Caminhos padrão
 # -------------------------------------------------------------------
 BOOTCFG="/boot/firmware/config.txt"
 [ -f "$BOOTCFG" ] || BOOTCFG="/boot/config.txt"
 APP_PATH="/home/pi/raspi/ponto.py"
-BACKUP="${BOOTCFG}.bak.$(date +%Y%m%d%H%M)"
-LCD_REPO="/home/pi/LCD-show"
+SERVICE_PATH="/etc/systemd/system/ponto.service"
 
+# -------------------------------------------------------------------
+# 🩺 Detectar se já existe configuração anterior
+# -------------------------------------------------------------------
+if [ -f "$SERVICE_PATH" ]; then
+  echo "⚙️ Detecção: o serviço ponto.service já existe."
+  echo "Escolha a ação desejada:"
+  echo "1) Reconfigurar display e reinstalar serviço"
+  echo "2) Apenas reiniciar serviço ponto"
+  echo "3) Cancelar"
+  read -p "👉 Escolha [1-3]: " opt
+  case $opt in
+    1) echo "🔧 Reconfigurando...";;
+    2) sudo systemctl restart ponto.service && echo "✅ Serviço reiniciado." && exit 0;;
+    3) echo "🚪 Saindo sem alterações." && exit 0;;
+  esac
+fi
+
+# -------------------------------------------------------------------
+# 💾 Backup para rollback
+# -------------------------------------------------------------------
+BACKUP="${BOOTCFG}.bak.$(date +%Y%m%d%H%M)"
 sudo cp "$BOOTCFG" "$BACKUP"
 echo "💾 Backup criado: $BACKUP"
 
 # -------------------------------------------------------------------
-# 🧠 Detectar HDMI ou SPI
+# 📺 Detectar display SPI automaticamente
 # -------------------------------------------------------------------
-echo "🔍 Verificando tipo de display..."
-if tvservice -s 2>/dev/null | grep -q "HDMI"; then
-  echo "🖥️ Display HDMI detectado — não é necessário driver SPI."
-  DISPLAY_MODE="HDMI"
-else
-  DISPLAY_MODE="SPI"
+echo ""
+echo "📺 Detectando LCD touchscreen..."
+DETECTED="none"
+
+if dmesg | grep -qi "waveshare"; then
+  DETECTED="waveshare"
+elif dmesg | grep -qi "mhs35"; then
+  DETECTED="mhs35"
+elif dmesg | grep -qi "goodtft"; then
+  DETECTED="goodtft"
+elif dmesg | grep -qi "ili9486"; then
+  DETECTED="ili9486"
 fi
 
 # -------------------------------------------------------------------
-# 📺 Instalação do driver LCD (apenas para SPI)
+# 🖐️ Seleção manual (caso não detectado)
 # -------------------------------------------------------------------
-if [ "$DISPLAY_MODE" = "SPI" ]; then
-  echo "📺 Modo SPI detectado — preparando instalação interativa do driver LCD..."
-
-  # Clona repositório se não existir
-  if [ ! -d "$LCD_REPO" ]; then
-    git clone https://github.com/goodtft/LCD-show.git "$LCD_REPO"
-  fi
-  cd "$LCD_REPO"
-
-  # Menu interativo de seleção
-  CHOICE=$(dialog --clear --title "Seleção de LCD" --menu "Escolha o modelo do seu display:" 15 60 6 \
-    1 "Waveshare 3.5\"" \
-    2 "MHS 3.5\"" \
-    3 "GoodTFT 3.5\"" \
-    4 "ILI9486 Genérico" \
-    5 "Cancelar" \
-    3>&1 1>&2 2>&3)
-
-  clear
-  case $CHOICE in
-    1) LCD_SCRIPT="LCD35-show"; LCD_NAME="waveshare";;
-    2) LCD_SCRIPT="MHS35-show"; LCD_NAME="mhs35";;
-    3) LCD_SCRIPT="LCD35-show"; LCD_NAME="goodtft";;
-    4) LCD_SCRIPT="LCD35-show"; LCD_NAME="ili9486";;
-    5|"") echo "❌ Instalação cancelada."; exit 0;;
+if [ "$DETECTED" = "none" ]; then
+  echo ""
+  echo "⚠️ Nenhum LCD detectado automaticamente."
+  echo "Selecione o modelo:"
+  echo "1) Waveshare 3.5\""
+  echo "2) MHS 3.5\""
+  echo "3) GoodTFT 3.5\""
+  echo "4) ILI9486 Genérico"
+  echo "5) Outro SPI (overlay padrão)"
+  read -p "👉 Escolha [1-5]: " opt
+  case $opt in
+    1) DETECTED="waveshare" ;;
+    2) DETECTED="mhs35" ;;
+    3) DETECTED="goodtft" ;;
+    4) DETECTED="ili9486" ;;
+    5|*) DETECTED="default" ;;
   esac
-
-  echo "📄 Instalando driver $LCD_NAME usando script $LCD_SCRIPT ..."
-  sudo chmod +x "$LCD_SCRIPT"
-
-  if ! sudo ./"$LCD_SCRIPT"; then
-    echo "❌ Falha na instalação do driver LCD. Restaurando backup..."
-    sudo cp "$BACKUP" "$BOOTCFG"
-    exit 1
-  fi
-
-  echo "✅ Driver $LCD_NAME instalado com sucesso!"
-else
-  echo "✅ Nenhum driver LCD necessário (display HDMI detectado)."
 fi
 
 # -------------------------------------------------------------------
-# 🧪 Teste do framebuffer (SPI ou HDMI)
+# ⚙️ Aplicar overlay correspondente (modo KMS moderno)
+# -------------------------------------------------------------------
+echo ""
+echo "📄 Aplicando configuração para display: $DETECTED"
+OVERLAY="vc4-kms-dpi-default"
+
+case $DETECTED in
+  waveshare) OVERLAY="vc4-kms-dpi-waveshare35a" ;;
+  mhs35) OVERLAY="vc4-kms-dpi-mhs35" ;;
+  goodtft) OVERLAY="vc4-kms-dpi-ili9486" ;;  # GoodTFT usa ILI9486
+  ili9486) OVERLAY="vc4-kms-dpi-ili9486" ;;
+esac
+
+sudo sed -i '/^dtoverlay=/d' "$BOOTCFG"
+sudo tee -a "$BOOTCFG" > /dev/null <<EOF
+
+# --- LCD SPI configurado automaticamente (kernel 6.0) ---
+dtoverlay=${OVERLAY},rotate=90,speed=48000000
+max_framebuffers=2
+framebuffer_width=480
+framebuffer_height=320
+EOF
+
+echo "✅ Overlay aplicado: $OVERLAY"
+
+# -------------------------------------------------------------------
+# 🧪 Teste de framebuffer e rollback se falhar
 # -------------------------------------------------------------------
 echo ""
 echo "🔎 Testando framebuffer..."
 if ! fbset -s >/dev/null 2>&1; then
   echo "❌ Framebuffer não detectado! Restaurando backup..."
   sudo cp "$BACKUP" "$BOOTCFG"
+  echo "🔄 Configuração revertida."
   exit 1
 else
   echo "✅ Framebuffer ativo."
 fi
 
 # -------------------------------------------------------------------
-# 🧭 Teste visual do LCD
-# -------------------------------------------------------------------
-TEST_IMG="/tmp/lcd_test.ppm"
-cat > "$TEST_IMG" <<'PPM'
-P3
-480 320
-255
-255 0 0   0 255 0   0 0 255
-PPM
-
-if command -v fbi >/dev/null 2>&1; then
-  sudo fbi -T 1 -d /dev/fb0 -noverbose -a "$TEST_IMG" >/dev/null 2>&1 &
-  echo "🖥️ Exibindo imagem de teste por 5 s..."
-  sleep 5
-  sudo killall fbi >/dev/null 2>&1 || true
-fi
-
-# -------------------------------------------------------------------
-# 📱 Teste opcional de toque
-# -------------------------------------------------------------------
-echo ""
-read -p "👉 Deseja testar o toque na tela agora? [s/N]: " TOQUE
-if [[ "$TOQUE" =~ ^[Ss]$ ]]; then
-  sudo python3 - <<'PY'
-import tkinter as tk
-root = tk.Tk()
-root.attributes("-fullscreen", True)
-root.configure(bg="black")
-msg = tk.Label(root, text="Toque na tela...", fg="white", bg="black", font=("Arial", 22))
-msg.pack(expand=True)
-def touched(e): msg.config(text=f"✔ Toque detectado ({e.x},{e.y})"); root.after(2000, root.destroy)
-root.bind("<Button-1>", touched)
-root.after(10000, root.destroy)
-root.mainloop()
-PY
-fi
-
-# -------------------------------------------------------------------
-# ⚙️ Serviço systemd ponto.py
+# ⚙️ Criar serviço systemd para ponto.py (com sudo)
 # -------------------------------------------------------------------
 echo ""
 echo "⚙️ Criando serviço systemd para ponto.py..."
-cat <<EOF | sudo tee /etc/systemd/system/ponto.service >/dev/null
+cat <<EOF | sudo tee "$SERVICE_PATH" > /dev/null
 [Unit]
-Description=Aplicação ponto.py automática (root + LCD)
+Description=Aplicação ponto.py automática (sudo + LCD)
 After=graphical.target
 
 [Service]
+Type=simple
 User=root
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/pi/.Xauthority
 ExecStart=/usr/bin/python3 $APP_PATH
 WorkingDirectory=/home/pi/raspi
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
 Restart=always
 RestartSec=5
 
@@ -150,13 +145,16 @@ RestartSec=5
 WantedBy=graphical.target
 EOF
 
+sudo chmod 644 "$SERVICE_PATH"
 sudo systemctl daemon-reload
 sudo systemctl enable ponto.service
+
+echo "✅ Serviço ponto.service criado e habilitado."
 
 # -------------------------------------------------------------------
 # 🖱️ Ocultar cursor
 # -------------------------------------------------------------------
-cat <<EOF | sudo tee /etc/systemd/system/unclutter.service >/dev/null
+cat <<EOF | sudo tee /etc/systemd/system/unclutter.service > /dev/null
 [Unit]
 Description=Ocultar cursor do mouse
 After=graphical.target
@@ -169,21 +167,22 @@ User=pi
 [Install]
 WantedBy=graphical.target
 EOF
+
 sudo systemctl enable unclutter.service
 
 # -------------------------------------------------------------------
-# 🔐 Sudoers
+# 🔐 Ajustar sudoers (para permitir execução direta)
 # -------------------------------------------------------------------
 sudo bash -c 'echo "pi ALL=(ALL) NOPASSWD: /usr/bin/python3" > /etc/sudoers.d/010_pi-nopasswd-python'
 sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd-python
 
 # -------------------------------------------------------------------
-# 🧹 Limpeza
+# 🧹 Limpeza final
 # -------------------------------------------------------------------
 sudo apt autoremove -y && sudo apt clean
 echo ""
 echo "✅ Instalação concluída com sucesso!"
-echo "📺 Tipo de display: $DISPLAY_MODE"
-[ "$DISPLAY_MODE" = "SPI" ] && echo "🧩 Driver SPI aplicado: $LCD_NAME"
+echo "📺 Display configurado: $OVERLAY"
 echo "💾 Backup salvo em: $BACKUP"
-echo "🔁 Reinicie com: sudo reboot"
+echo "⚙️ Serviço criado: $SERVICE_PATH"
+echo "🔁 Reinicie o sistema para aplicar (sudo reboot)"
