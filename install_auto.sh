@@ -7,7 +7,7 @@ echo "────────────────────────�
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
 # -------------------------------------------------------------------
-#sudo apt update -y && sudo apt upgrade -y
+sudo apt update -y && sudo apt upgrade -y
 sudo apt install -y git sqlite3 unclutter python3 python3-pip python3-tk python3-rpi.gpio fbset fbi
 
 # -------------------------------------------------------------------
