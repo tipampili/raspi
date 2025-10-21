@@ -200,18 +200,14 @@ elif [ "$DRIVER" = "lcdwiki" ]; then
   chmod -R 755 .
   echo "⚙️ Instalando LCDwiki MHS35-show..."
   sudo ./MHS35-show
+  # -------------------------------------------------------------------
+  # 🧹 Limpeza final
+  # -------------------------------------------------------------------
+  sudo apt autoremove -y && sudo apt clean
 fi
 
-echo "✅ Driver $DRIVER instalado com sucesso."
-
-# -------------------------------------------------------------------
-# 🧹 Limpeza final
-# -------------------------------------------------------------------
-sudo apt autoremove -y && sudo apt clean
-
-echo ""
 echo "✅ Instalação concluída com sucesso!"
-echo "📺 Driver: $DRIVER"
+echo "📺 Driver: $DRIVER instalado com sucesso."
 echo "💾 Backup: $BACKUP"
 echo "🧠 Monitoramento ativo: ponto-check.timer"
 echo "⚙️ Serviço: /etc/systemd/system/ponto.service"
