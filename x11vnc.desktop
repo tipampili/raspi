@@ -1,5 +1,0 @@
-[Desktop Entry]
-Type = Application
-Name = x11vnc
-Exec = x11vnc -forever -usepw -httpport 5900 -q -bg
-StartupNotify = false
