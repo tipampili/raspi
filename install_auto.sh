@@ -209,6 +209,31 @@ hostname -I | awk '{print $1}'
 echo "✅ RealVNC Server ativado e em execução!"
 
 # -------------------------------------------------------------------
+echo "⏰ Configurando reboot diário às 00:00..."
+# -------------------------------------------------------------------
+# Linha de cron a adicionar
+CRON_CMD="0 0 * * * /sbin/shutdown -r now"
+
+# Cria crontab vazio se não existir e adiciona o comando
+crontab -l 2>/dev/null > temp_cron || true
+
+# Verifica se a linha já existe
+if grep -Fxq "$CRON_CMD" temp_cron; then
+    echo "✅ O reboot diário já está configurado."
+else
+    echo "$CRON_CMD" >> temp_cron
+    crontab temp_cron
+    echo "✅ Tarefa adicionada com sucesso!"
+fi
+
+# Remove arquivo temporário
+rm -f temp_cron
+
+# Mostra o crontab atual
+echo "📋 Crontab atual:"
+crontab -l
+
+# -------------------------------------------------------------------
 # 📺 Escolha do driver LCD
 # -------------------------------------------------------------------
 echo ""
