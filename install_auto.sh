@@ -286,6 +286,8 @@ echo "💾 Backup: $BACKUP"
 echo "🧠 Monitoramento: ponto-check.timer"
 echo "☀️ Brilho máximo e tela sempre ligada configurados"
 echo "✅ RealVNC Server ativado e em execução!"
+echo "🌐 Endereço IP do Raspberry Pi:"
+hostname -I | awk '{print $1}'
 echo "📋 Crontab atual:"
 crontab -l
 echo "🔁 Reinicie o Raspberry Pi: sudo reboot"
