@@ -7,8 +7,8 @@ echo "────────────────────────�
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
 # -------------------------------------------------------------------
-sudo apt update -y && sudo apt upgrade -y
-sudo apt install -y git sqlite3 unclutter python3 python3-pip python3-tk python3-rpi.gpio fbset fbi
+#sudo apt update && sudo apt upgrade -y
+sudo apt install -y git sqlite3 unclutter python3 python3-pip python3-tk python3-rpi.gpio fbset fbi x11-xserver-utils
 
 # -------------------------------------------------------------------
 # 📄 Caminhos padrão
@@ -70,7 +70,6 @@ EOF
 sudo chmod 644 "$SERVICE_PATH"
 sudo systemctl daemon-reload
 sudo systemctl enable ponto.service
-
 echo "✅ Serviço ponto.service criado e habilitado."
 
 # -------------------------------------------------------------------
@@ -84,25 +83,20 @@ cat <<'EOF' | sudo tee /usr/local/bin/ponto-check.sh > /dev/null
 LOGFILE="/var/log/ponto-check.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
 
-check_fb() {
-  [ -e /dev/fb0 ]
-}
-
-check_ponto() {
-  pgrep -f "python3 /home/pi/raspi/ponto.py" > /dev/null
-}
+check_fb() { [ -e /dev/fb0 ]; }
+check_ponto() { pgrep -f "python3 /home/pi/raspi/ponto.py" > /dev/null; }
 
 if ! check_fb; then
-  echo "$DATE ⚠️ Framebuffer /dev/fb0 ausente — LCD pode ter falhado." >> "$LOGFILE"
+  echo "$DATE ⚠️ Framebuffer ausente — reiniciando ponto.service." >> "$LOGFILE"
   sudo systemctl restart ponto.service
   exit 1
 fi
 
 if ! check_ponto; then
-  echo "$DATE ⚠️ ponto.py não está em execução — reiniciando serviço." >> "$LOGFILE"
+  echo "$DATE ⚠️ ponto.py parado — reiniciando serviço." >> "$LOGFILE"
   sudo systemctl restart ponto.service
 else
-  echo "$DATE ✅ Verificação ok — ponto.py ativo e LCD funcional." >> "$LOGFILE"
+  echo "$DATE ✅ ponto.py ativo e LCD funcional." >> "$LOGFILE"
 fi
 EOF
 
@@ -160,7 +154,43 @@ sudo bash -c 'echo "pi ALL=(ALL) NOPASSWD: /usr/bin/python3" > /etc/sudoers.d/01
 sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd-python
 
 # -------------------------------------------------------------------
-# 🖥️ Escolha do driver LCD
+# 💡 Manter tela ligada e brilho máximo
+# -------------------------------------------------------------------
+
+echo ""
+echo "💡 Configurando para manter o LCD sempre ligado e brilho máximo..."
+
+# 1️⃣ Impedir screen blank no console
+sudo sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt 2>/dev/null || \
+sudo sed -i 's/$/ consoleblank=0/' /boot/cmdline.txt
+
+# 2️⃣ Impedir blank e DPMS no X11
+sudo mkdir -p /etc/xdg/lxsession/LXDE-pi
+sudo tee -a /etc/xdg/lxsession/LXDE-pi/autostart > /dev/null <<'EOF'
+@xset s off
+@xset -dpms
+@xset s noblank
+EOF
+
+# 3️⃣ Serviço para forçar brilho máximo no boot
+sudo tee /etc/systemd/system/backlight-on.service > /dev/null <<'EOF'
+[Unit]
+Description=Manter brilho máximo e LCD ligado
+After=graphical.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'for b in /sys/class/backlight/*/brightness; do echo 255 > "$b" 2>/dev/null || true; done'
+
+[Install]
+WantedBy=graphical.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable backlight-on.service
+
+# -------------------------------------------------------------------
+# 📺 Escolha do driver LCD
 # -------------------------------------------------------------------
 echo ""
 echo "📺 Escolha o tipo de LCD conectado:"
@@ -207,8 +237,8 @@ elif [ "$DRIVER" = "lcdwiki" ]; then
 fi
 
 echo "✅ Instalação concluída com sucesso!"
-echo "📺 Driver: $DRIVER instalado com sucesso."
+echo "📺 Driver: $DRIVER instalado"
 echo "💾 Backup: $BACKUP"
-echo "🧠 Monitoramento ativo: ponto-check.timer"
-echo "⚙️ Serviço: /etc/systemd/system/ponto.service"
-echo "🔁 Reinicie com: sudo reboot"
+echo "🧠 Monitoramento: ponto-check.timer"
+echo "☀️ Brilho máximo e tela sempre ligada configurados"
+echo "🔁 Reinicie o Raspberry Pi: sudo reboot"
