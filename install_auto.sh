@@ -43,51 +43,6 @@ sudo cp "$BOOTCFG" "$BACKUP"
 echo "💾 Backup criado: $BACKUP"
 
 # -------------------------------------------------------------------
-# 🖥️ Escolha do driver LCD
-# -------------------------------------------------------------------
-echo ""
-echo "📺 Escolha o tipo de LCD conectado:"
-echo "1) GoodTFT (LCD35-show)"
-echo "2) LCDwiki (MHS35-show)"
-read -p "👉 Escolha [1-2]: " opt
-
-DRIVER=""
-if [ "$opt" = "1" ]; then
-  DRIVER="goodtft"
-elif [ "$opt" = "2" ]; then
-  DRIVER="lcdwiki"
-else
-  echo "❌ Opção inválida. Abortando."
-  exit 1
-fi
-
-# -------------------------------------------------------------------
-# 🔄 Instalar driver selecionado
-# -------------------------------------------------------------------
-echo ""
-echo "🧩 Instalando driver para $DRIVER..."
-cd /home/pi
-sudo rm -rf LCD-show
-
-if [ "$DRIVER" = "goodtft" ]; then
-  echo "⬇️ Clonando GoodTFT..."
-  git clone https://github.com/goodtft/LCD-show.git
-  cd LCD-show
-  chmod -R 755 .
-  echo "⚙️ Instalando GoodTFT LCD35-show..."
-  sudo ./LCD35-show
-elif [ "$DRIVER" = "lcdwiki" ]; then
-  echo "⬇️ Clonando LCDwiki..."
-  git clone https://github.com/Lcdwiki/LCD-show.git
-  cd LCD-show
-  chmod -R 755 .
-  echo "⚙️ Instalando LCDwiki MHS35-show..."
-  sudo ./MHS35-show
-fi
-
-echo "✅ Driver $DRIVER instalado com sucesso."
-
-# -------------------------------------------------------------------
 # ⚙️ Criar serviço systemd do ponto.py (sudo + auto restart)
 # -------------------------------------------------------------------
 echo ""
@@ -203,6 +158,51 @@ sudo systemctl enable unclutter.service
 # -------------------------------------------------------------------
 sudo bash -c 'echo "pi ALL=(ALL) NOPASSWD: /usr/bin/python3" > /etc/sudoers.d/010_pi-nopasswd-python'
 sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd-python
+
+# -------------------------------------------------------------------
+# 🖥️ Escolha do driver LCD
+# -------------------------------------------------------------------
+echo ""
+echo "📺 Escolha o tipo de LCD conectado:"
+echo "1) GoodTFT (LCD35-show)"
+echo "2) LCDwiki (MHS35-show)"
+read -p "👉 Escolha [1-2]: " opt
+
+DRIVER=""
+if [ "$opt" = "1" ]; then
+  DRIVER="goodtft"
+elif [ "$opt" = "2" ]; then
+  DRIVER="lcdwiki"
+else
+  echo "❌ Opção inválida. Abortando."
+  exit 1
+fi
+
+# -------------------------------------------------------------------
+# 🔄 Instalar driver selecionado
+# -------------------------------------------------------------------
+echo ""
+echo "🧩 Instalando driver para $DRIVER..."
+cd /home/pi
+sudo rm -rf LCD-show
+
+if [ "$DRIVER" = "goodtft" ]; then
+  echo "⬇️ Clonando GoodTFT..."
+  git clone https://github.com/goodtft/LCD-show.git
+  cd LCD-show
+  chmod -R 755 .
+  echo "⚙️ Instalando GoodTFT LCD35-show..."
+  sudo ./LCD35-show
+elif [ "$DRIVER" = "lcdwiki" ]; then
+  echo "⬇️ Clonando LCDwiki..."
+  git clone https://github.com/Lcdwiki/LCD-show.git
+  cd LCD-show
+  chmod -R 755 .
+  echo "⚙️ Instalando LCDwiki MHS35-show..."
+  sudo ./MHS35-show
+fi
+
+echo "✅ Driver $DRIVER instalado com sucesso."
 
 # -------------------------------------------------------------------
 # 🧹 Limpeza final
