@@ -1,13 +1,14 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Iniciando instalação do ponto.py com LCD touchscreen e suporte para kernel 6.0 (Bookworm)..."
+echo "🚀 Iniciando instalação/reconfiguração do ponto.py com LCD touchscreen (GoodTFT ou LCDwiki)"
+echo "───────────────────────────────────────────────────────────────"
 
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
 # -------------------------------------------------------------------
 sudo apt update -y && sudo apt upgrade -y
-sudo apt install -y sqlite3 unclutter git cmake python3 python3-pip python3-tk python3-rpi.gpio fbset fbi
+sudo apt install -y git sqlite3 unclutter python3 python3-pip python3-tk python3-rpi.gpio fbset fbi
 
 # -------------------------------------------------------------------
 # 📄 Caminhos padrão
@@ -15,6 +16,24 @@ sudo apt install -y sqlite3 unclutter git cmake python3 python3-pip python3-tk p
 BOOTCFG="/boot/firmware/config.txt"
 [ -f "$BOOTCFG" ] || BOOTCFG="/boot/config.txt"
 APP_PATH="/home/pi/raspi/ponto.py"
+SERVICE_PATH="/etc/systemd/system/ponto.service"
+
+# -------------------------------------------------------------------
+# 🩺 Modo reconfiguração se já instalado
+# -------------------------------------------------------------------
+if [ -f "$SERVICE_PATH" ]; then
+  echo ""
+  echo "⚙️ O serviço ponto.service já existe."
+  echo "1) Reinstalar driver e reconfigurar"
+  echo "2) Reiniciar ponto.py"
+  echo "3) Cancelar"
+  read -p "👉 Escolha [1-3]: " opt
+  case $opt in
+    1) echo "🔧 Reconfigurando ambiente..." ;;
+    2) sudo systemctl restart ponto.service && echo "✅ Serviço reiniciado." && exit 0 ;;
+    3) echo "🚪 Saindo sem alterações." && exit 0 ;;
+  esac
+fi
 
 # -------------------------------------------------------------------
 # 💾 Backup para rollback
@@ -24,158 +43,142 @@ sudo cp "$BOOTCFG" "$BACKUP"
 echo "💾 Backup criado: $BACKUP"
 
 # -------------------------------------------------------------------
-# 📺 Detectar display SPI automaticamente
-# -------------------------------------------------------------------
-echo "📺 Detectando LCD touchscreen..."
-DETECTED="none"
-
-if dmesg | grep -qi "waveshare"; then
-  DETECTED="waveshare"
-elif dmesg | grep -qi "mhs35"; then
-  DETECTED="mhs35"
-elif dmesg | grep -qi "goodtft"; then
-  DETECTED="goodtft"
-elif dmesg | grep -qi "ili9486"; then
-  DETECTED="ili9486"
-fi
-
-# -------------------------------------------------------------------
-# 🖐️ Seleção manual (se necessário)
-# -------------------------------------------------------------------
-if [ "$DETECTED" = "none" ]; then
-  echo ""
-  echo "⚠️ Nenhum LCD detectado automaticamente."
-  echo "Selecione o modelo:"
-  echo "1) Waveshare 3.5\""
-  echo "2) MHS 3.5\""
-  echo "3) GoodTFT 3.5\""
-  echo "4) ILI9486 Genérico"
-  echo "5) Outro SPI (vc4-kms-dpi-default)"
-  read -p "👉 Escolha [1-5]: " opt
-  case $opt in
-    1) DETECTED="waveshare" ;;
-    2) DETECTED="mhs35" ;;
-    3) DETECTED="goodtft" ;;
-    4) DETECTED="ili9486" ;;
-    5|*) DETECTED="default" ;;
-  esac
-fi
-
-# -------------------------------------------------------------------
-# ⚙️ Aplicar overlay correspondente (modo KMS moderno)
+# 🖥️ Escolha do driver LCD
 # -------------------------------------------------------------------
 echo ""
-echo "📄 Aplicando configuração para display: $DETECTED"
-OVERLAY="vc4-kms-dpi-default"
+echo "📺 Escolha o tipo de LCD conectado:"
+echo "1) GoodTFT (LCD35-show)"
+echo "2) LCDwiki (MHS35-show)"
+read -p "👉 Escolha [1-2]: " opt
 
-case $DETECTED in
-  waveshare) OVERLAY="vc4-kms-dpi-waveshare35a" ;;
-  mhs35) OVERLAY="vc4-kms-dpi-mhs35" ;;
-  goodtft) OVERLAY="vc4-kms-dpi-ili9486" ;;  # GoodTFT usa controlador ILI9486 no kernel 6.0
-  ili9486) OVERLAY="vc4-kms-dpi-ili9486" ;;
-esac
-
-sudo sed -i '/^dtoverlay=/d' "$BOOTCFG"
-sudo tee -a "$BOOTCFG" > /dev/null <<EOF
-
-# --- LCD SPI configurado automaticamente (kernel 6.0) ---
-dtoverlay=${OVERLAY},rotate=90,speed=48000000
-max_framebuffers=2
-framebuffer_width=480
-framebuffer_height=320
-EOF
-
-echo "✅ Overlay aplicado: $OVERLAY"
-
-# -------------------------------------------------------------------
-# 🧪 Teste de framebuffer e rollback se falhar
-# -------------------------------------------------------------------
-echo ""
-echo "🔎 Testando framebuffer..."
-if ! fbset -s >/dev/null 2>&1; then
-  echo "❌ Framebuffer não detectado! Restaurando backup..."
-  sudo cp "$BACKUP" "$BOOTCFG"
-  echo "🔄 Configuração revertida."
+DRIVER=""
+if [ "$opt" = "1" ]; then
+  DRIVER="goodtft"
+elif [ "$opt" = "2" ]; then
+  DRIVER="lcdwiki"
+else
+  echo "❌ Opção inválida. Abortando."
   exit 1
-else
-  echo "✅ Framebuffer ativo."
 fi
 
 # -------------------------------------------------------------------
-# 🧭 Teste visual do LCD antes do reboot
+# 🔄 Instalar driver selecionado
 # -------------------------------------------------------------------
-TEST_IMG="/tmp/lcd_test.ppm"
 echo ""
-echo "🧭 Testando exibição do LCD..."
-cat > "$TEST_IMG" <<'PPM'
-P3
-480 320
-255
-255 0 0  0 255 0  0 0 255
-PPM
+echo "🧩 Instalando driver para $DRIVER..."
+cd /home/pi
+sudo rm -rf LCD-show
 
-if command -v fbi >/dev/null 2>&1; then
-  sudo fbi -T 1 -d /dev/fb0 -noverbose -a "$TEST_IMG" >/dev/null 2>&1 &
-  echo "🖥️ Imagem de teste exibida por 5 segundos..."
-  sleep 5
-  sudo killall fbi >/dev/null 2>&1 || true
-else
-  echo "⚠️ Comando fbi não disponível — pulando teste visual."
+if [ "$DRIVER" = "goodtft" ]; then
+  echo "⬇️ Clonando GoodTFT..."
+  git clone https://github.com/goodtft/LCD-show.git
+  cd LCD-show
+  chmod -R 755 .
+  echo "⚙️ Instalando GoodTFT LCD35-show..."
+  sudo ./LCD35-show
+elif [ "$DRIVER" = "lcdwiki" ]; then
+  echo "⬇️ Clonando LCDwiki..."
+  git clone https://github.com/Lcdwiki/LCD-show.git
+  cd LCD-show
+  chmod -R 755 .
+  echo "⚙️ Instalando LCDwiki MHS35-show..."
+  sudo ./MHS35-show
 fi
 
-# -------------------------------------------------------------------
-# 🧩 Teste de toque (opcional)
-# -------------------------------------------------------------------
-echo ""
-read -p "👉 Deseja testar o toque na tela agora? [s/N]: " resp
-if [[ "$resp" =~ ^[Ss]$ ]]; then
-  echo "📱 Teste de toque: toque em qualquer área da tela..."
-  sudo python3 - <<'EOF'
-import tkinter as tk
-import time
-root = tk.Tk()
-root.attributes("-fullscreen", True)
-root.configure(bg="black")
-label = tk.Label(root, text="Toque na tela para testar...", fg="white", bg="black", font=("Arial", 20))
-label.pack(expand=True)
-def on_touch(event):
-    label.config(text=f"✔ Toque detectado em ({event.x}, {event.y})")
-    root.after(2000, root.destroy)
-root.bind("<Button-1>", on_touch)
-root.after(10000, root.destroy)
-root.mainloop()
-EOF
-else
-  echo "⏭️ Teste de toque ignorado."
-fi
+echo "✅ Driver $DRIVER instalado com sucesso."
 
 # -------------------------------------------------------------------
-# ⚙️ Criar serviço systemd para ponto.py
+# ⚙️ Criar serviço systemd do ponto.py (sudo + auto restart)
 # -------------------------------------------------------------------
 echo ""
-echo "⚙️ Criando serviço systemd para ponto.py..."
-cat <<EOF | sudo tee /etc/systemd/system/ponto.service > /dev/null
+echo "⚙️ Criando serviço systemd ponto.service..."
+
+cat <<EOF | sudo tee "$SERVICE_PATH" > /dev/null
 [Unit]
-Description=Aplicação ponto.py automática (root + LCD)
+Description=Aplicação ponto.py (root + LCD)
 After=graphical.target
 
 [Service]
+Type=simple
 User=root
+WorkingDirectory=/home/pi/raspi
+ExecStart=/usr/bin/python3 $APP_PATH
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/pi/.Xauthority
-ExecStart=/usr/bin/python3 $APP_PATH
-WorkingDirectory=/home/pi/raspi
 Restart=always
 RestartSec=5
-ExecStartPost=/bin/bash -c 'gpio -g mode 18 out; gpio -g write 18 1; sleep 0.3; gpio -g write 18 0'
 
 [Install]
 WantedBy=graphical.target
 EOF
 
+sudo chmod 644 "$SERVICE_PATH"
 sudo systemctl daemon-reload
 sudo systemctl enable ponto.service
-echo "✅ Serviço ponto.service configurado."
+
+echo "✅ Serviço ponto.service criado e habilitado."
+
+# -------------------------------------------------------------------
+# 🧠 Criar serviço de monitoramento ponto-check
+# -------------------------------------------------------------------
+echo ""
+echo "🧠 Criando serviço ponto-check (monitoramento automático)..."
+
+cat <<'EOF' | sudo tee /usr/local/bin/ponto-check.sh > /dev/null
+#!/bin/bash
+LOGFILE="/var/log/ponto-check.log"
+DATE=$(date '+%Y-%m-%d %H:%M:%S')
+
+check_fb() {
+  [ -e /dev/fb0 ]
+}
+
+check_ponto() {
+  pgrep -f "python3 /home/pi/raspi/ponto.py" > /dev/null
+}
+
+if ! check_fb; then
+  echo "$DATE ⚠️ Framebuffer /dev/fb0 ausente — LCD pode ter falhado." >> "$LOGFILE"
+  sudo systemctl restart ponto.service
+  exit 1
+fi
+
+if ! check_ponto; then
+  echo "$DATE ⚠️ ponto.py não está em execução — reiniciando serviço." >> "$LOGFILE"
+  sudo systemctl restart ponto.service
+else
+  echo "$DATE ✅ Verificação ok — ponto.py ativo e LCD funcional." >> "$LOGFILE"
+fi
+EOF
+
+sudo chmod +x /usr/local/bin/ponto-check.sh
+
+cat <<EOF | sudo tee /etc/systemd/system/ponto-check.service > /dev/null
+[Unit]
+Description=Verificação automática do LCD e ponto.py
+After=ponto.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ponto-check.sh
+EOF
+
+cat <<EOF | sudo tee /etc/systemd/system/ponto-check.timer > /dev/null
+[Unit]
+Description=Executa ponto-check a cada 2 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Unit=ponto-check.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now ponto-check.timer
+echo "✅ Monitoramento automático ativado (a cada 2 min)."
 
 # -------------------------------------------------------------------
 # 🖱️ Ocultar cursor
@@ -205,9 +208,11 @@ sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd-python
 # 🧹 Limpeza final
 # -------------------------------------------------------------------
 sudo apt autoremove -y && sudo apt clean
+
 echo ""
 echo "✅ Instalação concluída com sucesso!"
-echo "📺 Display configurado: $OVERLAY"
-echo "💾 Backup salvo em: $BACKUP"
-echo "🧭 Teste do LCD realizado com sucesso."
-echo "🔁 Para finalizar, reinicie com: sudo reboot"
+echo "📺 Driver: $DRIVER"
+echo "💾 Backup: $BACKUP"
+echo "🧠 Monitoramento ativo: ponto-check.timer"
+echo "⚙️ Serviço: /etc/systemd/system/ponto.service"
+echo "🔁 Reinicie com: sudo reboot"
