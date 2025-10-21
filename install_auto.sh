@@ -192,6 +192,23 @@ sudo systemctl daemon-reload
 sudo systemctl enable backlight-on.service
 
 # -------------------------------------------------------------------
+echo "🖥️ Ativando o RealVNC Server nativo do Raspberry Pi OS..."
+# -------------------------------------------------------------------
+# Habilita e inicia o serviço
+echo "⚙️ Habilitando e iniciando o serviço VNC..."
+sudo systemctl enable vncserver-x11-serviced.service
+sudo systemctl start vncserver-x11-serviced.service
+
+# (Opcional) Mostra status e IP
+echo "🔍 Verificando status do VNC..."
+sudo systemctl status vncserver-x11-serviced.service --no-pager | grep Active
+
+echo "🌐 Endereço IP do Raspberry Pi:"
+hostname -I | awk '{print $1}'
+
+echo "✅ RealVNC Server ativado e em execução!"
+
+# -------------------------------------------------------------------
 # 📺 Escolha do driver LCD
 # -------------------------------------------------------------------
 echo ""
