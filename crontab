@@ -1,2 +1,0 @@
-crontab -e
-0 0 * * * /sbin/shutdown -r now
