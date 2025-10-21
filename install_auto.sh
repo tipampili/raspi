@@ -285,4 +285,7 @@ echo "📺 Driver: $DRIVER instalado"
 echo "💾 Backup: $BACKUP"
 echo "🧠 Monitoramento: ponto-check.timer"
 echo "☀️ Brilho máximo e tela sempre ligada configurados"
+echo "✅ RealVNC Server ativado e em execução!"
+echo "📋 Crontab atual:"
+crontab -l
 echo "🔁 Reinicie o Raspberry Pi: sudo reboot"
