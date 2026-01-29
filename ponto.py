@@ -5,6 +5,7 @@ import datetime
 import requests
 import logging
 import threading
+import socket
 
 # Configuration
 DB_PATH = "/home/pi/raspi/ponto_database.db"
@@ -152,7 +153,8 @@ class PontoApp(tk.Tk):
         for cracha, horario in registros:
             hora = datetime.datetime.strptime(horario, '%Y-%m-%dT%H:%M:%S.%f')
             formatado = hora.strftime('%d%m%y%H%M')
-            payload = {"cracha": cracha, "horario": formatado}
+            host = socket.gethostname()
+            payload = {"cracha": cracha, "horario": formatado, "equipamento": host}
             if self.post_com_retry(payload):
                 cursor.execute("DELETE FROM ponto_data WHERE cracha=? AND horario=?", (cracha, horario))
                 self.db_conn.commit()
