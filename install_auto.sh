@@ -371,7 +371,7 @@ echo "💾 Backup: $BACKUP"
 
 echo "🧠 Monitoramento: ponto-check.timer"
 
-echo "🛡️ Configurações D e E aplicadas via ponto-session-setup.service"
+echo "🛡️ Configurações Foco no APP e DPMS aplicadas via ponto-session-setup.service"
 
 echo "☀️ Brilho máximo e tela sempre ligada configurados"
 
