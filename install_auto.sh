@@ -327,6 +327,17 @@ echo "🌐 Endereço IP do Raspberry Pi:"
 hostname -I | awk '{print $1}'
 echo "📋 Crontab atual:"
 crontab -l
-echo "🧩 Alterando Boot default para Gráfico"
+echo "🔎 Modo atual:"
+systemctl get-default
+
+echo "⚙️ Alterando para modo gráfico..."
 sudo systemctl set-default graphical.target
-echo "🔁 Reinicie o Raspberry Pi: sudo reboot"
+
+echo "🔎 Novo modo:"
+systemctl get-default
+
+echo ""
+echo "Pressione ENTER para reiniciar..."
+read
+
+sudo reboot
