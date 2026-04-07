@@ -2,7 +2,37 @@
 set -e
 
 echo "🚀 Iniciando instalação/reconfiguração do ponto.py com LCD touchscreen (GoodTFT ou LCDwiki)"
-echo "───────────────────────────────────────────────────────────────"
+
+# -------------------------------------------------------------------
+#🔧 Configuração do hostname
+# -------------------------------------------------------------------
+echo "🔧 Configuração do hostname"
+
+# Pergunta o número do ponto
+read -p "Informe o número do ponto (ex: 1, 2, 11): " NUM_PONTO
+
+# Validação básica (só números)
+if ! [[ "$NUM_PONTO" =~ ^[0-9]+$ ]]; then
+    echo "❌ Valor inválido! Digite apenas números."
+    exit 1
+fi
+
+# Formata com dois dígitos (01, 02, 11...)
+NUM_FORMATADO=$(printf "%02d" "$NUM_PONTO")
+
+# Monta hostname
+HOSTNAME="RASPI-PONTO-$NUM_FORMATADO"
+
+echo "📌 Hostname definido como: $HOSTNAME"
+
+# Aplica hostname
+sudo hostnamectl set-hostname "$HOSTNAME"
+
+# Atualiza /etc/hosts
+sudo sed -i "s/127.0.1.1.*/127.0.1.1\t$HOSTNAME/" /etc/hosts
+
+echo "✅ Hostname configurado com sucesso!"
+
 
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
@@ -325,7 +355,7 @@ elif [ "$DRIVER" = "lcdwiki" ]; then
 fi
 
 # -------------------------------------------------------------------
-🔧 Restaurando reboot...
+#🔧 Restaurando reboot...
 # -------------------------------------------------------------------
 echo "🔧 Restaurando reboot..."
 sudo rm /sbin/reboot
@@ -334,16 +364,25 @@ sudo rm /sbin/shutdown
 sudo mv /sbin/shutdown.bak /sbin/shutdown
 
 echo "✅ Instalação concluída com sucesso!"
+
 echo "📺 Driver: $DRIVER instalado"
+
 echo "💾 Backup: $BACKUP"
+
 echo "🧠 Monitoramento: ponto-check.timer"
+
 echo "🛡️ Configurações D e E aplicadas via ponto-session-setup.service"
+
 echo "☀️ Brilho máximo e tela sempre ligada configurados"
+
 echo "✅ RealVNC Server ativado e em execução!"
+
 echo "🌐 Endereço IP do Raspberry Pi:"
 hostname -I | awk '{print $1}'
+
 echo "📋 Crontab atual:"
 crontab -l
+
 echo "🔎 Modo atual:"
 systemctl get-default
 
