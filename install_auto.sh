@@ -268,6 +268,14 @@ rm -f temp_cron
 # Mostra o crontab atual
 echo "📋 Crontab atual:"
 crontab -l
+# -------------------------------------------------------------------
+#🚫 Bloqueando reboot automático...
+# -------------------------------------------------------------------
+echo "🚫 Bloqueando reboot automático..."
+sudo mv /sbin/reboot /sbin/reboot.bak
+sudo ln -s /bin/true /sbin/reboot
+sudo mv /sbin/shutdown /sbin/shutdown.bak
+sudo ln -s /bin/true /sbin/shutdown
 
 # -------------------------------------------------------------------
 # 📺 Escolha do driver LCD
@@ -315,6 +323,15 @@ elif [ "$DRIVER" = "lcdwiki" ]; then
   # -------------------------------------------------------------------
   sudo apt autoremove -y && sudo apt clean
 fi
+
+# -------------------------------------------------------------------
+🔧 Restaurando reboot...
+# -------------------------------------------------------------------
+echo "🔧 Restaurando reboot..."
+sudo rm /sbin/reboot
+sudo mv /sbin/reboot.bak /sbin/reboot
+sudo rm /sbin/shutdown
+sudo mv /sbin/shutdown.bak /sbin/shutdown
 
 echo "✅ Instalação concluída com sucesso!"
 echo "📺 Driver: $DRIVER instalado"
