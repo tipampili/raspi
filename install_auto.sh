@@ -7,7 +7,7 @@ echo "────────────────────────�
 # -------------------------------------------------------------------
 # 🔧 Atualização e pacotes base
 # -------------------------------------------------------------------
-#sudo apt update
+sudo apt update
 #sudo apt upgrade -y
 sudo apt install --only-upgrade realvnc-vnc-server -y
 sudo apt install -y git sqlite3 unclutter python3 python3-pip python3-tk python3-rpi.gpio fbset fbi x11-xserver-utils
@@ -143,6 +143,8 @@ After=graphical.target
 ExecStart=/usr/bin/unclutter -idle 0.1 -root
 Restart=always
 User=pi
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
 
 [Install]
 WantedBy=graphical.target
@@ -158,7 +160,6 @@ sudo chmod 440 /etc/sudoers.d/010_pi-nopasswd-python
 # -------------------------------------------------------------------
 # 💡 Manter tela ligada e brilho máximo
 # -------------------------------------------------------------------
-
 echo ""
 echo "💡 Configurando para manter o LCD sempre ligado e brilho máximo..."
 
@@ -166,13 +167,48 @@ echo "💡 Configurando para manter o LCD sempre ligado e brilho máximo..."
 sudo sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt 2>/dev/null || \
 sudo sed -i 's/$/ consoleblank=0/' /boot/cmdline.txt
 
-# 2️⃣ Impedir blank e DPMS no X11
-sudo mkdir -p /etc/xdg/lxsession/LXDE-pi
-sudo tee -a /etc/xdg/lxsession/LXDE-pi/autostart > /dev/null <<'EOF'
-@xset s off
-@xset -dpms
-@xset s noblank
+# 2️⃣ Aplicar somente D e E no ambiente gráfico, sem duplicar autostart
+cat <<'EOF' | sudo tee /usr/local/bin/ponto-session-setup.sh > /dev/null
+#!/bin/bash
+export DISPLAY=:0
+export XAUTHORITY=/home/pi/.Xauthority
+
+# Aguarda a sessão gráfica subir
+sleep 8
+
+# D) Desativar tudo que rouba foco
+gsettings set org.gnome.desktop.notifications show-banners false || true
+gsettings set org.gnome.desktop.session idle-delay 0 || true
+gsettings set org.gnome.desktop.screensaver lock-enabled false || true
+
+# E) Desativar DPMS (muito importante)
+xset -dpms || true
+xset s off || true
+xset s noblank || true
 EOF
+
+sudo chmod +x /usr/local/bin/ponto-session-setup.sh
+
+cat <<EOF | sudo tee /etc/systemd/system/ponto-session-setup.service > /dev/null
+[Unit]
+Description=Aplicar configuracoes de sessao grafica (foco e DPMS)
+After=graphical.target
+Wants=graphical.target
+
+[Service]
+Type=oneshot
+User=pi
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+ExecStart=/usr/local/bin/ponto-session-setup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable ponto-session-setup.service
 
 # 3️⃣ Serviço para forçar brilho máximo no boot
 sudo tee /etc/systemd/system/backlight-on.service > /dev/null <<'EOF'
@@ -284,10 +320,13 @@ echo "✅ Instalação concluída com sucesso!"
 echo "📺 Driver: $DRIVER instalado"
 echo "💾 Backup: $BACKUP"
 echo "🧠 Monitoramento: ponto-check.timer"
+echo "🛡️ Configurações D e E aplicadas via ponto-session-setup.service"
 echo "☀️ Brilho máximo e tela sempre ligada configurados"
 echo "✅ RealVNC Server ativado e em execução!"
 echo "🌐 Endereço IP do Raspberry Pi:"
 hostname -I | awk '{print $1}'
 echo "📋 Crontab atual:"
 crontab -l
+echo "🧩 Alterando Boot default para Gráfico"
+sudo systemctl set-default graphical.target
 echo "🔁 Reinicie o Raspberry Pi: sudo reboot"
